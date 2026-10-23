@@ -29,10 +29,10 @@ export default async function Nav() {
           <div className="flex items-center h-full">
             <LocalizedClientLink
               href="/"
-              className="txt-compact-xlarge-plus hover:text-ui-fg-base uppercase"
+              className="text-[15px] font-normal tracking-[0.25em] text-[#111111] hover:opacity-75 uppercase"
               data-testid="nav-store-link"
             >
-              Medusa Store
+              UPRISE ART
             </LocalizedClientLink>
           </div>
 

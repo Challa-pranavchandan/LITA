@@ -8,10 +8,27 @@ checkEnvVariables()
 const S3_HOSTNAME = process.env.MEDUSA_CLOUD_S3_HOSTNAME
 const S3_PATHNAME = process.env.MEDUSA_CLOUD_S3_PATHNAME
 
+const path = require("path")
+
 /**
  * @type {import('next').NextConfig}
  */
 const nextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname, "../../"),
+  },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      react: path.resolve(__dirname, "node_modules/react"),
+      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+      "@": path.resolve(__dirname, "src"),
+      "@lib": path.resolve(__dirname, "src/lib"),
+      "@modules": path.resolve(__dirname, "src/modules"),
+      "@pages": path.resolve(__dirname, "src/pages"),
+    }
+    return config
+  },
   reactStrictMode: true,
   logging: {
     fetches: {
@@ -38,6 +55,14 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "*.s3.amazonaws.com",
+      },
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+      },
+      {
+        protocol: "https",
+        hostname: "**.medusajs.com",
       },
       ...(S3_HOSTNAME && S3_PATHNAME
         ? [

@@ -1,0 +1,97 @@
+@import "@fontsource-variable/familjen-grotesk";
+@import "@fontsource-variable/literata";
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --header-h: 64px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-sans font-medium tracking-tightish;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :focus-visible {
+    outline: 2px solid theme("colors.indigo.ink");
+    outline-offset: 3px;
+  }
+  ::selection {
+    background: theme("colors.indigo.ink");
+    color: white;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@keyframes slidein {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@layer components {
+  .page {
+    @apply mx-auto w-full max-w-page px-5 md:px-8;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 border border-ink px-6 py-3 text-[15px] font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-solid {
+    @apply btn bg-ink text-paper hover:bg-indigo-ink hover:border-indigo-ink;
+  }
+  .btn-line {
+    @apply btn bg-transparent text-ink hover:bg-ink hover:text-paper;
+  }
+  .field {
+    @apply w-full border border-dust bg-wall px-3.5 py-3 text-[15px] text-ink placeholder:text-graphite/70 focus:border-ink focus:outline-none;
+  }
+  .label {
+    @apply mb-1.5 block text-sm text-graphite;
+  }
+  .link {
+    @apply underline decoration-dust decoration-1 underline-offset-4 transition-colors hover:decoration-ink;
+  }
+  /* Wall label: the museum-placard block on artwork pages */
+  .wall-label {
+    @apply border-l-2 border-ink pl-5;
+  }
+  .prose-art {
+    @apply font-serif text-[17px] leading-[1.75] text-ink/90;
+    max-width: 62ch;
+  }
+  .prose-art p + p {
+    margin-top: 1em;
+  }
+}
