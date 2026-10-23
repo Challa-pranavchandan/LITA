@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { login, register } from "@/lib/data/customer";
 
 export function AuthForms() {
@@ -56,7 +57,17 @@ export function AuthForms() {
         )}
         <div><label htmlFor="auth-email" className="label">Email</label><input id="auth-email" name="email" type="email" required autoComplete="email" className="field" /></div>
         <div>
-          <label htmlFor="auth-password" className="label">Password</label>
+          <div className="flex items-center justify-between">
+            <label htmlFor="auth-password" className="label">Password</label>
+            {mode === "login" && (
+              <Link
+                href="/account/forgot-password"
+                className="text-xs text-graphite hover:text-ink underline transition-colors"
+              >
+                Forgot password?
+              </Link>
+            )}
+          </div>
           <input id="auth-password" name="password" type="password" required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} className="field" />
           {mode === "register" && <p className="mt-1 text-sm text-graphite">Use at least 8 characters.</p>}
         </div>
