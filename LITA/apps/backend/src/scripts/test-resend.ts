@@ -28,19 +28,27 @@ async function testResendConnection() {
 
   try {
     console.log("\nTesting authentication against Resend API...")
-    const res = await fetch("https://api.resend.com/api-keys", {
-      method: "GET",
+    // Probe the email sending endpoint with a validation ping
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({}),
     })
 
     const body = await res.json().catch(() => null)
 
-    if (res.ok) {
+    // A 422 "Missing required field" confirms the API key is authenticated and authorized to send!
+    if (res.status === 422 && body?.name === "missing_required_field") {
       console.log("\n✅ Status: CONNECTED SUCCESSFULLY!")
-      console.log("  Your Resend API key is valid and authenticated.")
+      console.log("  Your Resend API key is valid and authorized to send emails.")
+      console.log("  Key permission: Sending Access (Recommended security practice)")
       console.log("  Password reset emails will be dispatched via Resend.\n")
+    } else if (res.ok) {
+      console.log("\n✅ Status: CONNECTED SUCCESSFULLY!")
+      console.log("  Your Resend API key is valid and active.\n")
     } else {
       console.log(`\n❌ Status: AUTHENTICATION FAILED (HTTP ${res.status})`)
       console.log("  Response from Resend:", body)
