@@ -69,6 +69,10 @@ export async function register(input: {
   first_name: string;
   last_name: string;
 }): Promise<AuthResult> {
+  if (!input.password || typeof input.password !== "string" || input.password.length < 8) {
+    return { ok: false, error: "Password must be at least 8 characters long." };
+  }
+
   try {
     const regToken = await sdk.auth.register("customer", "emailpass", {
       email: input.email,
