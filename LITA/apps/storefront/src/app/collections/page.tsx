@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { listCollections } from "@/lib/data/catalog";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 export const metadata: Metadata = { title: "Collections" };
 
 export default async function CollectionsPage() {

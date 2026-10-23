@@ -20,13 +20,18 @@ export function ArtworkCard({
   const price = lowestPrice(product);
   const sold = isSoldOut(product);
   const ratio = aspectOf(product);
-  const medium = product.material || metaString(product, "medium");
+  const medium = product.material || metaString(product, "medium") || "Painting";
+  const artist =
+    metaString(product, "artist") ||
+    metaString(product, "artist_name") ||
+    product.subtitle ||
+    "Studio Artist";
 
   return (
     <article className="group relative mb-10 break-inside-avoid">
       <Link href={`/artworks/${product.handle}`} className="block">
         <div
-          className="relative w-full overflow-hidden bg-mist"
+          className="relative w-full overflow-hidden bg-[#F7F7F6]"
           style={{ aspectRatio: String(ratio) }}
         >
           {product.thumbnail ? (
@@ -36,7 +41,7 @@ export function ArtworkCard({
               fill
               sizes="(min-width:1024px) 25vw, (min-width:768px) 33vw, 50vw"
               priority={priority}
-              className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025]"
+              className="object-contain p-4 transition-transform duration-500 ease-out group-hover:scale-[1.025] drop-shadow-[0_8px_16px_rgba(0,0,0,0.06)]"
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-graphite">
@@ -44,25 +49,38 @@ export function ArtworkCard({
             </div>
           )}
           {sold && (
-            <span className="absolute left-3 top-3 bg-paper px-2.5 py-1 text-sm">
+            <span className="absolute left-3 top-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 text-xs font-medium text-[#222222]">
               Sold
             </span>
           )}
         </div>
-        <h3 className="mt-3 font-serif text-[17px] font-normal italic leading-snug">
-          {product.title}
-        </h3>
-        {medium && <p className="text-sm text-graphite">{medium}</p>}
-        {price && !sold && (
-          <p className="mt-0.5 text-[15px] tabular-nums">
-            {formatMoney(price.amount, price.currency)}
+
+        {/* Card Metadata matching reference style */}
+        <div className="pt-3 pb-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="font-sans text-[15px] font-normal text-[#222222] tracking-tight truncate group-hover:text-black">
+              {product.title}
+            </h3>
+            {price && !sold && (
+              <span className="font-sans text-[15px] font-normal text-[#222222] whitespace-nowrap tabular-nums">
+                {formatMoney(price.amount, price.currency)}
+              </span>
+            )}
+          </div>
+          <p className="font-sans text-[13.5px] text-[#666666] font-normal mt-0.5 truncate">
+            {artist}
           </p>
-        )}
+          {medium && (
+            <p className="font-sans text-[13px] text-[#777777] font-normal mt-2.5">
+              {medium}
+            </p>
+          )}
+        </div>
       </Link>
       <SaveButton
         productId={product.id}
         title={product.title}
-        className="absolute right-3 top-3 bg-paper/90 p-2 backdrop-blur-sm"
+        className="absolute right-3 top-3 bg-white/80 p-2 backdrop-blur-sm hover:bg-white"
       />
     </article>
   );

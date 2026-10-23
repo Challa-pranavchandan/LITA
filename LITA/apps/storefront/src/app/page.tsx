@@ -3,9 +3,10 @@ import Link from "next/link";
 import { siteConfig } from "@/lib/config";
 import { listArtworks, listCollections, CURATED_COLLECTIONS } from "@/lib/data/catalog";
 import { ArtworkGrid } from "@/components/ArtworkGrid";
+import { RecentlyAddedSection } from "@/components/RecentlyAddedSection";
 
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default async function HomePage() {
   const [{ products }, collections] = await Promise.all([
@@ -59,25 +60,8 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {recent.length > 0 && (
-        <section className="page py-16">
-          <div className="mb-10 flex flex-col items-center text-center gap-4">
-            <h2
-              className="font-serif text-4xl md:text-5xl font-normal text-[#2c2c2c]"
-              style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
-            >
-              Recently Added
-            </h2>
-            <Link
-              href="/artworks?sort=newest"
-              className="text-sm text-[#4a7c7c] underline underline-offset-4 hover:opacity-70 transition-opacity"
-            >
-              View All
-            </Link>
-          </div>
-          <ArtworkGrid products={recent} />
-        </section>
-      )}
+      {/* ── Recently Added Section (80vh Carousel) ── */}
+      <RecentlyAddedSection products={recent} />
 
       {/* ── Collections Section (Curated Showcase) ── */}
       <section className="w-full border-t border-b border-[#e2e2e2] bg-white">

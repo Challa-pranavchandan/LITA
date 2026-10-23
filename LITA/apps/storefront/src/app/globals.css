@@ -94,4 +94,21 @@
   .prose-art p + p {
     margin-top: 1em;
   }
+  /* Full-width 3-card carousel */
+  .recently-added-card {
+    flex: 0 0 88vw;
+    width: 88vw;
+  }
+  @media (min-width: 640px) {
+    .recently-added-card {
+      flex: 0 0 calc((100% - 24px) / 2);
+      width: calc((100% - 24px) / 2);
+    }
+  }
+  @media (min-width: 1024px) {
+    .recently-added-card {
+      flex: 0 0 calc((100% - 48px) / 3);
+      width: calc((100% - 48px) / 3);
+    }
+  }
 }

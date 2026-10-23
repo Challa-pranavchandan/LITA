@@ -5,7 +5,7 @@ import { ArtworkGrid } from "@/components/ArtworkGrid";
 import { BrowseFilters } from "@/components/BrowseFilters";
 import { Pagination } from "@/components/Pagination";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 type Props = {
   params: Promise<{ handle: string }>;
