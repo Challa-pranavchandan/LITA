@@ -181,23 +181,35 @@ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
       - Storefront: Created Server Actions `requestPasswordReset(email)` and `resetPassword(token, newPassword)` in `apps/storefront/src/lib/data/password-reset.ts`. Implemented `/account/forgot-password` and `/account/reset-password` pages and added "Forgot password?" link to `AuthForms.tsx`.
     - **Task 5 — Rate Limiting (POSTPONED):**
       Evaluated application-level vs infrastructure-level rate limiting. In-process memory limiters are fragile across server restarts and container scaling. Postponed to the infrastructure / edge deployment phase (e.g. Cloudflare WAF rate limiting rules or Upstash Redis distributed sliding window in Next.js middleware).
+    - **Task 6 — Server-Side Password Policy (COMPLETED):**
+      Enforced server-side 8-character minimum validation directly in `apps/storefront/src/lib/data/customer.ts` (`register()` action) and `apps/storefront/src/lib/data/password-reset.ts` (`resetPassword()` action), preventing client-side bypass.
+    - **Task 7 — Robust Duplicate Registration Error Handling (COMPLETED):**
+      Replaced simple string regex matching in `register()` with `FetchError` status validation (`e.status === 401 || e.status === 409`) alongside pattern checks, handling both Medusa auth identity collisions (401) and customer profile collisions (409) reliably.
+    - **Task 8 — Security Headers & Report-Only CSP (COMPLETED):**
+      Added `HSTS`, `X-Frame-Options` (`SAMEORIGIN`), `X-Content-Type-Options` (`nosniff`), `Referrer-Policy` (`strict-origin-when-cross-origin`), and non-blocking `Content-Security-Policy-Report-Only` (covering Google Fonts, AWS S3/Cloudinary/Medusa images, and backend API connections) in `apps/storefront/next.config.js`. Verified via HTTP response headers.
+    - **Task 9 — Email Verification Architecture: Option C Selected (DOCUMENTED):**
+      Evaluated 3 architectural patterns. Selected **Option C (Passwordless / Magic Link at Checkout)** to eliminate registration friction during fine art purchasing while retaining dual compatibility with traditional `emailpass` logins. Documented in `docs/AUTHENTICATION_AND_AUTHORIZATION.md`.
 
 ---
 
 ## 6. Current Roadmap & Next Steps
 
-1. **Edge & Infrastructure-Level Rate Limiting (Postponed from Auth Phase 1):**
+1. **Option C: Passwordless / Magic Link Verification Workflow (Phase 2 Auth Roadmap):**
+   - [ ] Implement short-lived signed magic link request and verification actions (`requestPasswordlessLink`, `verifyPasswordlessToken`) with Resend dispatch.
+   - [ ] Wire seamless magic link verification directly into `/checkout` contact step with atomic cart transfer.
+
+2. **Edge & Infrastructure-Level Rate Limiting (Postponed from Auth Phase 1):**
    - [ ] Configure Cloudflare WAF rate limiting on `/auth/*` and `/account` POST routes (or `@upstash/ratelimit` distributed middleware).
 
-2. **Payment Gateway Integration:**
+3. **Payment Gateway Integration:**
    - [ ] Medusa Stripe payment module configuration in `medusa-config.ts`.
    - [ ] Connect Stripe Elements in `/checkout` with `NEXT_PUBLIC_STRIPE_KEY`.
 
-3. **Custom Backend Artwork Attributes:**
+4. **Custom Backend Artwork Attributes:**
    - [ ] Extend Medusa product entity with custom art attributes: `artist_name`, `medium`, `dimensions`, `certificate_of_authenticity`.
    - [ ] Surface metadata directly in Store API `/store/products` responses.
 
-4. **Notification & Email Workflows:**
+5. **Notification & Email Workflows:**
    - [x] Password reset emails via Resend (`apps/backend/src/subscribers/password-reset.ts`).
    - [ ] Connect inquiry form (`/api/inquiry`) and newsletter signups to email service (Resend / SendGrid).
    - [ ] Automated order confirmation and tracking email workflows.

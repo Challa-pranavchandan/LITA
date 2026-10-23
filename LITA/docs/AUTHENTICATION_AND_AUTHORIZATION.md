@@ -443,3 +443,45 @@ In a decoupled architecture (Next.js 15 App Router Server Actions + Medusa v2 No
    - Utilizing `@upstash/ratelimit` within Next.js `middleware.ts` or route handlers.
    - Requires `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
 
+---
+
+## 8. Selected Email Verification Strategy: Option C (Passwordless / Magic Link at Checkout)
+
+Following architecture review, **Option C** was chosen as the primary email verification and low-friction authentication paradigm for LITA.
+
+### Rationale
+In high-end editorial and fine art commerce, requiring prospective buyers to create or remember passwords during checkout introduces critical cart abandonment friction. Option C seamlessly verifies the customer's email address while establishing an authenticated session in a single gesture.
+
+### Workflow & Architecture Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Shopper as Customer / Buyer (Browser)
+    participant Checkout as /checkout or /account
+    participant BFF as Next.js Server Action
+    participant MedusaAuth as Medusa Auth & Verification
+    participant Resend as Resend Email Service
+
+    Shopper->>Checkout: Enter email address (e.g. buyer@example.com)
+    Checkout->>BFF: requestPasswordlessLink(email, cartId)
+    BFF->>MedusaAuth: Generate 10-minute signed verification token
+    MedusaAuth-->>BFF: Token generated
+    BFF->>Resend: Dispatch branded LITA Magic Link email
+    BFF-->>Shopper: UI shows "Magic link sent to your email"
+
+    Note over Shopper,Resend: Shopper clicks "Verify & Continue Checkout" in email
+    Shopper->>Checkout: GET /checkout/verify?token=...&cart_id=...
+    Checkout->>BFF: verifyPasswordlessToken(token)
+    BFF->>MedusaAuth: Exchange token for authenticated customer JWT
+    MedusaAuth-->>BFF: Return customer session JWT
+    BFF->>BFF: Set HttpOnly Cookie (_medusa_jwt)
+    BFF->>MedusaAuth: transferCart(cartId) -> link active cart to customer
+    BFF-->>Shopper: Redirect to payment step (Authenticated, Verified, Cart Retained)
+```
+
+### Key Security & UX Guarantees
+1. **Single-Use Signed Tokens:** Magic link tokens are cryptographically signed with the backend `JWT_SECRET`, valid for 10 minutes, and invalidated immediately upon first redemption.
+2. **Seamless Cart Preservation:** Any items previously placed in the guest cart are atomically linked to the newly resolved or verified customer via Medusa's `transferCart`.
+3. **Dual Compatibility:** Returning customers who prefer conventional password login retain standard `/auth/customer/emailpass` capabilities without collision.
+
