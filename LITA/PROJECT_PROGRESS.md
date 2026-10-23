@@ -171,19 +171,34 @@ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
     - Unified gallery footer (`Footer.tsx`) with monthly release newsletter subscription form (`NewsletterForm.tsx`).
     - Informational pages: `/about` (artist bio and studio vision), `/commissions` (custom artwork commission requests), `/contact`, `/shipping` (shipping, packaging, care, and returns policy).
 
+11. **Authentication & Authorization Hardening (Branch `auth-hardening`):**
+    - **Task 1 — JWT / Cookie Lifetime Alignment (COMPLETED):**
+      Aligned Medusa backend JWT token expiration to 7 days (`jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d"`) matching the storefront `_medusa_jwt` HttpOnly cookie `maxAge`. Prevents silent session invalidation while cookie is still present.
+    - **Tasks 2 & 3 — Production Secrets & CORS Fail-Fast Guard (COMPLETED):**
+      Added production startup guard in `apps/backend/medusa-config.ts` enforcing that `JWT_SECRET` and `COOKIE_SECRET` are ≥ 32 characters, and `STORE_CORS`, `ADMIN_CORS`, and `AUTH_CORS` are explicitly defined. Fully backward-compatible in development.
+    - **Task 4 — Complete Password Reset Flow with Resend (COMPLETED):**
+      - Backend: Created subscriber `apps/backend/src/subscribers/password-reset.ts` listening to `auth.password_reset`, generating branded editorial HTML emails, and dispatching via Resend REST API (with automatic fallback to console link logging in local dev).
+      - Storefront: Created Server Actions `requestPasswordReset(email)` and `resetPassword(token, newPassword)` in `apps/storefront/src/lib/data/password-reset.ts`. Implemented `/account/forgot-password` and `/account/reset-password` pages and added "Forgot password?" link to `AuthForms.tsx`.
+    - **Task 5 — Rate Limiting (POSTPONED):**
+      Evaluated application-level vs infrastructure-level rate limiting. In-process memory limiters are fragile across server restarts and container scaling. Postponed to the infrastructure / edge deployment phase (e.g. Cloudflare WAF rate limiting rules or Upstash Redis distributed sliding window in Next.js middleware).
+
 ---
 
 ## 6. Current Roadmap & Next Steps
 
-1. **Payment Gateway Integration:**
+1. **Edge & Infrastructure-Level Rate Limiting (Postponed from Auth Phase 1):**
+   - [ ] Configure Cloudflare WAF rate limiting on `/auth/*` and `/account` POST routes (or `@upstash/ratelimit` distributed middleware).
+
+2. **Payment Gateway Integration:**
    - [ ] Medusa Stripe payment module configuration in `medusa-config.ts`.
    - [ ] Connect Stripe Elements in `/checkout` with `NEXT_PUBLIC_STRIPE_KEY`.
 
-2. **Custom Backend Artwork Attributes:**
+3. **Custom Backend Artwork Attributes:**
    - [ ] Extend Medusa product entity with custom art attributes: `artist_name`, `medium`, `dimensions`, `certificate_of_authenticity`.
    - [ ] Surface metadata directly in Store API `/store/products` responses.
 
-3. **Notification & Email Workflows:**
+4. **Notification & Email Workflows:**
+   - [x] Password reset emails via Resend (`apps/backend/src/subscribers/password-reset.ts`).
    - [ ] Connect inquiry form (`/api/inquiry`) and newsletter signups to email service (Resend / SendGrid).
    - [ ] Automated order confirmation and tracking email workflows.
 
