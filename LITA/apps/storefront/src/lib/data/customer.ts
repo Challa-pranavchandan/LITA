@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import type { HttpTypes } from "@medusajs/types";
+import { FetchError } from "@medusajs/js-sdk";
 import { sdk } from "@/lib/medusa";
 
 const JWT_COOKIE = "_medusa_jwt";
@@ -91,9 +92,16 @@ export async function register(input: {
       { authorization: `Bearer ${regToken}` }
     );
     return login(input.email, input.password);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "";
-    if (/exists/i.test(msg)) {
+  } catch (e: unknown) {
+    const isFetchError = e instanceof FetchError;
+    const msg = e instanceof Error ? e.message : String(e);
+    const status = isFetchError ? e.status : undefined;
+
+    // Medusa returns HTTP 401 on duplicate auth identity or HTTP 409 on duplicate customer record
+    if (
+      ((status === 401 || status === 409) && /exists|duplicate/i.test(msg)) ||
+      /exists|duplicate/i.test(msg)
+    ) {
       return { ok: false, error: "An account with this email already exists. Sign in instead." };
     }
     return { ok: false, error: "We couldn't create the account. Try again." };
