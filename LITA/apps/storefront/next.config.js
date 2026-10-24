@@ -8,6 +8,22 @@ checkEnvVariables()
 const S3_HOSTNAME = process.env.MEDUSA_CLOUD_S3_HOSTNAME
 const S3_PATHNAME = process.env.MEDUSA_CLOUD_S3_PATHNAME
 
+/**
+ * Cloudflare R2-related environment variables
+ */
+const R2_HOSTNAME =
+  process.env.R2_PUBLIC_HOSTNAME ||
+  (() => {
+    if (process.env.R2_FILE_URL) {
+      try {
+        return new URL(process.env.R2_FILE_URL).hostname
+      } catch {
+        return undefined
+      }
+    }
+    return undefined
+  })()
+
 const path = require("path")
 
 /**
@@ -73,6 +89,14 @@ const nextConfig = {
             },
           ]
         : []),
+      ...(R2_HOSTNAME
+        ? [
+            {
+              protocol: "https",
+              hostname: R2_HOSTNAME,
+            },
+          ]
+        : []),
     ],
   },
   async headers() {
@@ -81,7 +105,7 @@ const nextConfig = {
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
-      "img-src 'self' data: blob: http://localhost:* https://*.s3.*.amazonaws.com https://*.s3.amazonaws.com https://res.cloudinary.com https://*.medusajs.com",
+      `img-src 'self' data: blob: http://localhost:* https://*.s3.*.amazonaws.com https://*.s3.amazonaws.com https://res.cloudinary.com https://*.medusajs.com ${R2_HOSTNAME ? `https://${R2_HOSTNAME}` : ""}`.trim(),
       `connect-src 'self' http://localhost:9000 http://127.0.0.1:9000 ${process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || ""}`.trim(),
       "frame-ancestors 'self'",
       "base-uri 'self'",
