@@ -11,18 +11,22 @@ const S3_PATHNAME = process.env.MEDUSA_CLOUD_S3_PATHNAME
 /**
  * Cloudflare R2-related environment variables
  */
-const R2_HOSTNAME =
-  process.env.R2_PUBLIC_HOSTNAME ||
-  (() => {
-    if (process.env.R2_FILE_URL) {
-      try {
-        return new URL(process.env.R2_FILE_URL).hostname
-      } catch {
-        return undefined
-      }
-    }
-    return undefined
-  })()
+const getCleanHostname = (input) => {
+  if (!input) return undefined
+  try {
+    const url = input.startsWith("http://") || input.startsWith("https://")
+      ? new URL(input)
+      : new URL(`https://${input}`)
+    return url.hostname
+  } catch {
+    return input.replace(/^https?:\/\//, "").split("/")[0]
+  }
+}
+
+const R2_HOSTNAME = getCleanHostname(
+  process.env.R2_PUBLIC_HOSTNAME || process.env.R2_FILE_URL
+)
+
 
 const path = require("path")
 
