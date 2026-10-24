@@ -33,8 +33,32 @@ if (process.env.NODE_ENV === 'production') {
       )
     }
   }
+
+  const requiredR2: Array<string> = [
+    'R2_FILE_URL',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'R2_BUCKET',
+    'R2_ENDPOINT',
+  ]
+  for (const key of requiredR2) {
+    if (!process.env[key]) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_ARGUMENT,
+        `[startup] ${key} must be set in production for Cloudflare R2 file storage.`
+      )
+    }
+  }
 }
 // ---------------------------------------------------------------------------
+
+const isR2Configured = Boolean(
+  process.env.R2_FILE_URL &&
+  process.env.R2_ACCESS_KEY_ID &&
+  process.env.R2_SECRET_ACCESS_KEY &&
+  process.env.R2_BUCKET &&
+  process.env.R2_ENDPOINT
+)
 
 module.exports = defineConfig({
   projectConfig: {
@@ -50,5 +74,35 @@ module.exports = defineConfig({
       cookieSecret: process.env.COOKIE_SECRET,
       jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
     }
-  }
+  },
+  modules: [
+    ...(isR2Configured
+      ? [
+          {
+            resolve: "@medusajs/medusa/file",
+            options: {
+              providers: [
+                {
+                  resolve: "@medusajs/medusa/file-s3",
+                  id: "s3",
+                  options: {
+                    file_url: process.env.R2_FILE_URL,
+                    access_key_id: process.env.R2_ACCESS_KEY_ID,
+                    secret_access_key: process.env.R2_SECRET_ACCESS_KEY,
+                    region: process.env.R2_REGION || "auto",
+                    bucket: process.env.R2_BUCKET,
+                    endpoint: process.env.R2_ENDPOINT,
+                    additional_client_config: {
+                      requestChecksumCalculation: "WHEN_REQUIRED",
+                      responseChecksumValidation: "WHEN_REQUIRED",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ]
+      : []),
+  ],
 })
+
