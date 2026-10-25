@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -8,7 +9,15 @@ export const metadata: Metadata = {
     "Livinin The Art is an art gallery and studio where you can discover original artwork and limited edition prints crafted with passion and purpose.",
 };
 
-const calloutSections = [
+interface CalloutSection {
+  title: ReactNode;
+  ctaText: string;
+  ctaHref?: string;
+  imageSrc: string;
+  imageAlt: string;
+}
+
+const calloutSections: CalloutSection[] = [
   {
     title: (
       <>
@@ -48,8 +57,7 @@ const calloutSections = [
         Visit our <em className="italic font-normal">gallery</em> to experience our collections in person or meet with an art advisor for a private viewing.
       </>
     ),
-    ctaText: "Visit Us",
-    ctaHref: "/contact",
+    ctaText: "Coming Soon",
     imageSrc: "/about/gallery-space.jpg",
     imageAlt: "Contemporary art gallery and exhibition room",
   },
@@ -109,12 +117,18 @@ export default function AboutPage() {
                 </div>
 
                 <div className="mt-7 sm:mt-9">
-                  <Link
-                    href={section.ctaHref}
-                    className="inline-block text-xs sm:text-[13px] font-sans font-normal tracking-wide text-[#232629] underline underline-offset-[5px] decoration-1 decoration-[#232629] hover:opacity-65 transition-opacity"
-                  >
-                    {section.ctaText}
-                  </Link>
+                  {section.ctaHref ? (
+                    <Link
+                      href={section.ctaHref}
+                      className="inline-block text-xs sm:text-[13px] font-sans font-normal tracking-wide text-[#232629] underline underline-offset-[5px] decoration-1 decoration-[#232629] hover:opacity-65 transition-opacity"
+                    >
+                      {section.ctaText}
+                    </Link>
+                  ) : (
+                    <span className="inline-block text-xs sm:text-[13px] font-sans font-medium tracking-wide text-[#71767D] cursor-default select-none">
+                      {section.ctaText}
+                    </span>
+                  )}
                 </div>
               </div>
 

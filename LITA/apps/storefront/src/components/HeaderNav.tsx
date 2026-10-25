@@ -323,6 +323,7 @@ export function HeaderNav({
                     Past
                   </Link>
                 </li>
+
                 <li className="pt-2">
                   <Link
                     href="/artworks"
@@ -346,12 +347,18 @@ export function HeaderNav({
                 <ul className="space-y-2.5 text-[14px]">
                   <li>
                     <Link
-                      href="/about"
+                      href="/gallery"
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >
-                      The Gallery
+                      Photo Gallery
                     </Link>
+                  </li>
+                  <li className="flex items-center gap-2 cursor-not-allowed select-none text-[#555555]">
+                    <span>The Gallery</span>
+                    <span className="text-red-500 text-[12px] font-medium tracking-wide animate-blink-slow">
+                      (coming soon)
+                    </span>
                   </li>
                 </ul>
               </div>
@@ -407,31 +414,20 @@ export function HeaderNav({
               <ul className="space-y-3 text-[14px]">
                 <li>
                   <Link
-                    href="/artworks?sort=newest"
-                    onClick={() => setActiveMenu(null)}
-                    className="text-[#222222] hover:text-black transition-colors block"
-                  >
-                    Recently Joined
-                  </Link>
-                </li>
-                <li>
-                  <Link
                     href="/about"
                     onClick={() => setActiveMenu(null)}
                     className="text-[#222222] hover:text-black transition-colors block"
                   >
-                    Inside the Studio
+                    About
                   </Link>
                 </li>
-                <li className="pt-2">
-                  <Link
-                    href="/artworks"
-                    onClick={() => setActiveMenu(null)}
-                    className="text-[#111111] underline underline-offset-4 font-normal block hover:opacity-75"
-                  >
-                    All Artists
-                  </Link>
+                <li className="flex items-center gap-2 cursor-not-allowed select-none text-[#555555]">
+                  <span>Inside the Studio</span>
+                  <span className="text-red-500 text-[12px] font-medium tracking-wide animate-blink-slow">
+                    (coming soon)
+                  </span>
                 </li>
+
               </ul>
             </div>
           )}

@@ -61,6 +61,20 @@
   }
 }
 
+@keyframes blinkSlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+.animate-blink-slow {
+  animation: blinkSlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+
 @layer components {
   .page {
     @apply mx-auto w-full max-w-page px-5 md:px-8;

@@ -225,7 +225,13 @@ export function MobileMenu({
                 <div className="bg-[#FAF9F7] px-8 py-5 space-y-5 text-[14px]">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[#888888] mb-2">Visit</p>
-                    <p><Link href="/about" className="text-[#333333] hover:text-black">The Gallery</Link></p>
+                    <p><Link href="/gallery" className="text-[#333333] hover:text-black">Photo Gallery</Link></p>
+                    <p className="pt-2 flex items-center gap-2 cursor-not-allowed select-none text-[#555555]">
+                      <span>The Gallery</span>
+                      <span className="text-red-500 text-[12px] font-medium tracking-wide animate-blink-slow">
+                        (coming soon)
+                      </span>
+                    </p>
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[#888888] mb-2">Advisory</p>
@@ -254,9 +260,13 @@ export function MobileMenu({
               </button>
               {expandedSection === "artists" && (
                 <div className="bg-[#FAF9F7] px-8 py-4 space-y-2.5 text-[14px]">
-                  <p><Link href="/artworks?sort=newest" className="text-[#333333] hover:text-black">Recently Joined</Link></p>
-                  <p><Link href="/about" className="text-[#333333] hover:text-black">Inside the Studio</Link></p>
-                  <p className="pt-1"><Link href="/artworks" className="text-black underline">All Artists</Link></p>
+                  <p><Link href="/about" className="text-[#333333] hover:text-black">About</Link></p>
+                  <p className="flex items-center gap-1.5 text-[#666666] cursor-not-allowed select-none">
+                    <span>Inside the Studio</span>
+                    <span className="text-red-500 text-[12px] font-medium tracking-wide animate-blink-slow">
+                      (coming soon)
+                    </span>
+                  </p>
                 </div>
               )}
             </div>
@@ -268,6 +278,16 @@ export function MobileMenu({
                 className="w-full flex items-center justify-between px-6 py-4 text-[16px] text-[#111111] hover:bg-gray-50 transition-colors"
               >
                 <span>Journal</span>
+              </Link>
+            </div>
+
+            {/* Gallery Direct Link */}
+            <div>
+              <Link
+                href="/gallery"
+                className="w-full flex items-center justify-between px-6 py-4 text-[16px] text-[#111111] hover:bg-gray-50 transition-colors"
+              >
+                <span>Photo Gallery</span>
               </Link>
             </div>
           </div>
