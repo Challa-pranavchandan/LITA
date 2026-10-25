@@ -19,40 +19,42 @@ export default async function HomePage() {
   return (
     <>
       {/* ── Hero Section ── */}
-      <section className="relative w-full overflow-hidden" style={{ height: "110vh", minHeight: 480 }}>
-        {/* Background image */}
+      <section className="relative w-full h-screen min-h-[580px] overflow-hidden">
+        {/* Background image - unoptimized and quality=100 ensures zero compression loss */}
         <Image
           src="/hero-bg.jpg"
-          alt="Livinin The Art hero background"
+          alt="Livinin The Art - Handcrafted Artwork"
           fill
           priority
+          unoptimized
+          quality={100}
           sizes="100vw"
-          className="object-cover object-center"
+          className="object-cover object-center w-full h-full"
         />
-        {/* Subtle dark overlay for text legibility */}
-        <div className="absolute inset-0 bg-black/20" />
+        {/* Gentle gradient scrim to keep artwork vibrant while ensuring text legibility */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/20 pointer-events-none" />
 
-        {/* Centered text content */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+        {/* Text content anchored gracefully towards the bottom so the central artwork remains visible */}
+        <div className="absolute inset-x-0 bottom-12 md:bottom-16 flex flex-col items-center justify-end text-center px-6 z-10">
           <h1
-            className="font-serif text-5xl md:text-6xl lg:text-7xl font-normal text-white drop-shadow-sm"
+            className="font-serif text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-normal text-white drop-shadow-md"
             style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif", letterSpacing: "0.01em" }}
           >
             Livinin The Art
           </h1>
-          <p className="mt-5 max-w-md text-base md:text-lg text-white/90 drop-shadow-sm leading-relaxed">
+          <p className="mt-4 max-w-lg text-base md:text-lg text-white/95 drop-shadow leading-relaxed">
             Artworks with heart — painted, lived, and made to be treasured.
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/artworks"
-              className="rounded-full border border-white bg-white/10 backdrop-blur-sm px-6 py-2.5 text-sm text-white hover:bg-white hover:text-[#111111] transition-colors duration-200"
+              className="rounded-full border border-white bg-white/20 backdrop-blur-md px-7 py-3 text-sm font-medium text-white hover:bg-white hover:text-[#111111] transition-all duration-200 shadow-sm"
             >
               View Collection
             </Link>
             <Link
               href="/artworks?sort=newest"
-              className="rounded-full border border-white bg-transparent px-6 py-2.5 text-sm text-white hover:bg-white hover:text-[#111111] transition-colors duration-200"
+              className="rounded-full border border-white/80 bg-black/20 backdrop-blur-md px-7 py-3 text-sm font-medium text-white hover:bg-white hover:text-[#111111] transition-all duration-200 shadow-sm"
             >
               Featured Artworks
             </Link>
@@ -147,7 +149,7 @@ export default async function HomePage() {
       <section className="w-full bg-white py-20 sm:py-24 md:py-28 lg:py-32 px-6 sm:px-10 border-b border-[#e2e2e2]">
         <div className="mx-auto max-w-[880px] text-center">
           <h2
-            className="font-serif text-3xl sm:text-4xl md:text-5xl lg:text-[48px] xl:text-[52px] font-normal text-[#3e3e42] leading-[1.28] tracking-[0.01em]"
+            className="font-serif text-3xl sm:text-4xl md:text-5xl lg:text-[60px] xl:text-[52px] font-normal text-[#3e3e42] leading-[1.28] tracking-[0.01em]"
             style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
           >
             Livin in the Art is a studio dedicated to handcrafted art across mediums—offering{" "}

@@ -23,48 +23,53 @@
 c:\Users\chall\OneDrive\Desktop\LITA\LITA\
 ├── apps/
 │   ├── backend/                           # Medusa v2 Commerce Engine (@dtc/backend)
-│   │   ├── medusa-config.ts               # Core Medusa config: DB URL, CORS, secrets, SSL
+│   │   ├── medusa-config.ts               # Core Medusa config: DB URL, CORS, secrets, SSL, R2 S3 provider
 │   │   ├── .env                           # Backend environment variables
 │   │   ├── static/                        # Media assets & local upload storage
 │   │   └── src/
 │   │       ├── admin/                     # Custom admin dashboard widgets & extensions
 │   │       ├── api/                       # File-based API endpoints (store/* and admin/*)
 │   │       ├── jobs/                      # Scheduled background jobs
+│   │       ├── scripts/                   # Diagnostic scripts (test-resend.ts, test-r2-upload.ts)
+│   │       ├── subscribers/               # Event subscribers (password-reset.ts via Resend)
 │   │       ├── workflows/                 # Business logic workflows and steps
 │   │       └── ...
 │   │
 │   └── storefront/                        # Customer-Facing Next.js Storefront (@dtc/storefront)
-│       ├── next.config.js                 # Next.js config (Turbopack root, aliases, remote patterns)
+│       ├── next.config.js                 # Next.js config (Turbopack root, aliases, CSP, R2 remote patterns)
 │       ├── .env.local                     # Storefront environment variables
 │       ├── public/                        # Static imagery (hero-bg, collection thumbnails)
 │       ├── src/
 │       │   ├── app/                       # App Router routes:
-│       │   │   ├── page.tsx               # Curated editorial gallery homepage
-│       │   │   ├── artworks/              # Artwork catalog & [handle] detail pages
+│       │   │   ├── page.tsx               # Curated editorial gallery homepage (ISR revalidate = 60)
+│       │   │   ├── artworks/              # Artwork catalog & [handle] detail pages (ISR revalidate = 60)
 │       │   │   ├── collections/           # Curated collection overviews & single collection pages
 │       │   │   ├── about/                 # Artist statement & studio background
 │       │   │   ├── commissions/           # Bespoke commission inquiry request workflow
 │       │   │   ├── contact/               # Studio contact form
 │       │   │   ├── shipping/              # Shipping, handling, care & return policies
 │       │   │   ├── saved/                 # Saved / Wishlist gallery
-│       │   │   ├── cart/                  # Dedicated cart page
-│       │   │   ├── checkout/              # Seamless guest / customer checkout flow
-│       │   │   ├── account/               # Customer account portal (auth & orders)
-│       │   │   ├── order/                 # Order confirmation & status
+│       │   │   ├── cart/                  # Dedicated cart page (dynamic)
+│       │   │   ├── checkout/              # Seamless guest / customer checkout flow (dynamic)
+│       │   │   ├── account/               # Customer account portal, forgot-password & reset-password
+│       │   │   ├── order/                 # Order confirmation & status (dynamic)
 │       │   │   ├── api/inquiry/           # Commission & artwork inquiry handler
 │       │   │   ├── globals.css            # Custom gallery design tokens & typography
 │       │   │   └── layout.tsx             # Root layout with Header & Footer
 │       │   ├── components/                # Modular gallery components (Header, HeaderNav, HeaderActions,
 │       │   │                              # CartDrawer, MobileMenu, PromoBanner, ArtworkGrid, BrowseFilters,
-│       │   │                              # livinIcons, SaveButton, SavedWorks, InquiryForm, Footer)
+│       │   │                              # livinIcons, SaveButton, SavedWorks, InquiryForm, Footer, RecentlyAddedSection)
 │       │   └── lib/                       # Medusa client & data services
 │       │       ├── medusa.ts              # Medusa JS SDK client instance
 │       │       ├── config.ts              # Site metadata & navigation configuration
 │       │       ├── format.ts              # Currency & dimension formatting helpers
 │       │       ├── saved.ts               # LocalStorage wishlist state helper
-│       │       └── data/                  # Server Actions / fetchers (catalog, cart, customer)
+│       │       └── data/                  # In-memory TTL cached fetchers (catalog, cart, customer, password-reset)
 │       └── package.json
 │
+├── docs/                                  # Deep-dive architecture and performance specifications
+│   ├── AUTHENTICATION_AND_AUTHORIZATION.md# Complete auth lifecycle, Option C magic link spec & security guarantees
+│   └── PERFORMANCE_AND_CACHING.md         # Storefront latency analysis, root cause, in-memory cache & ISR benchmarks
 ├── package.json                           # Turborepo root package.json
 ├── package-lock.json                      # Authoritative lockfile (npm@11.1.0)
 └── turbo.json                             # Turborepo pipeline tasks
@@ -81,6 +86,7 @@ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
 | **Storefront** | `http://localhost:8000` | **HEALTHY (200 OK)** | Clean App Router routes (`/`, `/artworks`, `/collections`, etc.) |
 | **Database** | Supabase PostgreSQL | **CONNECTED** | Remote pooled connection via SSL (`port 6543`) |
 | **Store Regions** | `GET /store/regions` | **OPERATIONAL** | Returns configured regions |
+| **Cloudflare R2 Storage** | S3 API Endpoint | **OPERATIONAL** | Verified via `npm run test:r2` diagnostic upload script |
 
 ---
 
@@ -171,27 +177,90 @@ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
     - Unified gallery footer (`Footer.tsx`) with monthly release newsletter subscription form (`NewsletterForm.tsx`).
     - Informational pages: `/about` (artist bio and studio vision), `/commissions` (custom artwork commission requests), `/contact`, `/shipping` (shipping, packaging, care, and returns policy).
 
+11. **Authentication & Authorization Hardening (Branch `auth-hardening`):**
+    - **Task 1 — JWT / Cookie Lifetime Alignment (COMPLETED):**
+      Aligned Medusa backend JWT token expiration to 7 days (`jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d"`) matching the storefront `_medusa_jwt` HttpOnly cookie `maxAge`. Prevents silent session invalidation while cookie is still present.
+    - **Tasks 2 & 3 — Production Secrets & CORS Fail-Fast Guard (COMPLETED):**
+      Added production startup guard in `apps/backend/medusa-config.ts` enforcing that `JWT_SECRET` and `COOKIE_SECRET` are ≥ 32 characters, and `STORE_CORS`, `ADMIN_CORS`, and `AUTH_CORS` are explicitly defined. Fully backward-compatible in development.
+    - **Task 4 — Complete Password Reset Flow with Resend (COMPLETED):**
+      - Backend: Created subscriber `apps/backend/src/subscribers/password-reset.ts` listening to `auth.password_reset`, generating branded editorial HTML emails, and dispatching via Resend REST API (with automatic fallback to console link logging in local dev).
+      - Storefront: Created Server Actions `requestPasswordReset(email)` and `resetPassword(token, newPassword)` in `apps/storefront/src/lib/data/password-reset.ts`. Implemented `/account/forgot-password` and `/account/reset-password` pages and added "Forgot password?" link to `AuthForms.tsx`.
+    - **Task 5 — Rate Limiting (POSTPONED):**
+      Evaluated application-level vs infrastructure-level rate limiting. In-process memory limiters are fragile across server restarts and container scaling. Postponed to the infrastructure / edge deployment phase (e.g. Cloudflare WAF rate limiting rules or Upstash Redis distributed sliding window in Next.js middleware).
+    - **Task 6 — Server-Side Password Policy (COMPLETED):**
+      Enforced server-side 8-character minimum validation directly in `apps/storefront/src/lib/data/customer.ts` (`register()` action) and `apps/storefront/src/lib/data/password-reset.ts` (`resetPassword()` action), preventing client-side bypass.
+    - **Task 7 — Robust Duplicate Registration Error Handling (COMPLETED):**
+      Replaced simple string regex matching in `register()` with `FetchError` status validation (`e.status === 401 || e.status === 409`) alongside pattern checks, handling both Medusa auth identity collisions (401) and customer profile collisions (409) reliably.
+    - **Task 8 — Security Headers & Report-Only CSP (COMPLETED):**
+      Added `HSTS`, `X-Frame-Options` (`SAMEORIGIN`), `X-Content-Type-Options` (`nosniff`), `Referrer-Policy` (`strict-origin-when-cross-origin`), and non-blocking `Content-Security-Policy-Report-Only` (covering Google Fonts, AWS S3/Cloudinary/Medusa images, and backend API connections) in `apps/storefront/next.config.js`. Verified via HTTP response headers.
+    - **Task 9 — Email Verification Architecture: Option C Selected (DOCUMENTED):**
+      Evaluated 3 architectural patterns. Selected **Option C (Passwordless / Magic Link at Checkout)** to eliminate registration friction during fine art purchasing while retaining dual compatibility with traditional `emailpass` logins. Documented in `docs/AUTHENTICATION_AND_AUTHORIZATION.md`.
+
+12. **Cloudflare R2 Media Storage Provider Integration (Branch `feature/r2-file-storage`):**
+    - **Medusa v2 S3 File Provider:** Configured `@medusajs/medusa/file-s3` provider in `apps/backend/medusa-config.ts` targeting Cloudflare R2 (`R2_FILE_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT`, `R2_REGION`). Added `requestChecksumCalculation: "WHEN_REQUIRED"` and `responseChecksumValidation: "WHEN_REQUIRED"` in `additional_client_config` for complete AWS S3 SDK compatibility with Cloudflare R2's S3 API.
+    - **Production Startup Fail-Fast Guard:** Added startup validation check in `medusa-config.ts` requiring all 5 R2 environment variables in production while gracefully preserving local disk storage fallback in local development when variables are unset.
+    - **Diagnostic Verification Script (`test:r2`):** Created `apps/backend/src/scripts/test-r2-upload.ts` (runnable via `npm run test:r2`) to verify uploading high-resolution artwork binaries to R2 via the S3 provider and verifying public download accessibility, content-type headers, and byte length.
+    - **Storefront Image Hostname Normalization:** Updated `apps/storefront/next.config.js` to dynamically parse and sanitize `NEXT_PUBLIC_R2_FILE_URL` / `R2_FILE_URL`, robustly stripping protocol schemes, subpaths, and trailing slashes for `images.remotePatterns`. Added comprehensive unit test suite in `apps/storefront/src/__tests__/next-config.test.js`.
+    - **Environment Documentation:** Added complete R2 variable specifications to `.env.example` and `.env.template` across both backend and storefront.
+
+13. **Storefront Performance Optimization & Latency Caching (Branch `feature/r2-file-storage`):**
+    - **Root Cause Investigation:** Discovered navigation clicks took 5–12+ seconds (and up to 25s on initial JIT compile). Pinpointed dual root causes:
+      1. Next.js `force-dynamic` cache skipping was disabling the Data Cache, ISR, and client router cache on catalog routes.
+      2. Physical cross-continental latency between local dev machine (India) and remote Supabase PostgreSQL in Sydney, Australia (`aws-0-ap-southeast-2`), incurring ~200–250ms per roundtrip across 20–30 sequential Medusa SQL queries per request (~6.5–7.5s wire wait time).
+    - **In-Memory Process TTL Cache:** Implemented in `apps/storefront/src/lib/data/catalog.ts` caching regions (300s), artworks and single products (60s), and collections/categories (120s). Eliminates repeated sequential SQL calls for browsing sessions.
+    - **Incremental Static Regeneration (ISR):** Replaced `force-dynamic` with `export const revalidate = 60` across all public catalog routes (`/`, `/artworks`, `/artworks/[handle]`, `/collections`, `/collections/[handle]`), restoring Next.js `<Link>` client prefetching and instant client-side route transitions (< 50ms – 1s).
+    - **Dynamic Route Isolation:** Sensitive and mutation-heavy routes (`/cart`, `/checkout`, `/account`, `/order/[id]`) intentionally remain dynamic for security and real-time state correctness.
+    - **UI Enhancements:** Redesigned `Footer.tsx` and built dedicated `RecentlyAddedSection.tsx`.
+    - **Comprehensive Documentation:** Created `docs/PERFORMANCE_AND_CACHING.md` documenting architecture diagrams, query waterfall analysis, before/after PowerShell benchmark measurements, and regional database migration recommendations.
+
+14. **Editorial About Page Redesign (Branch `feature/r2-file-storage`):**
+    - **Visual Alignment with Uprise Art Gallery Aesthetic:** Redesigned the storefront `/about` page (`apps/storefront/src/app/about/page.tsx`) to match high-end editorial contemporary art gallery aesthetics.
+    - **Hero Section:** Centered header with spaced tracking eyebrow (`ABOUT US`), responsive Cormorant Garamond headline (*"Expertly curated, entirely unique"*), and a high-resolution wide gallery banner.
+    - **Two-Column Hairline Grid Callouts:** Four modular 50/50 split sections bounded by subtle 1px border dividers (`border-[#E5E7EB]`):
+      1. *Artist Storytelling:* Narrative statement (*"Every artist has a story to tell..."*) with underlined CTA to browse artworks catalog (`/artworks`), paired with artist studio portrait.
+      2. *Art Advisory:* Advisory narrative (*"Our expert art advisors thoughtfully select..."*) with direct inquiry link (`/commissions`), paired with white-glove artwork handling photography.
+      3. *Curated Catalog & Limited Editions:* Original art narrative (*"We feature original artwork and limited edition prints..."*) linking to catalog, paired with detail photography of artist painting on canvas.
+      4. *Gallery Showroom & In-Person Viewings:* Gallery visit invitation (*"Visit our gallery to experience our collections in person..."*) linking to studio contact (`/contact`), paired with modern gallery exhibition photography.
+    - **Design System & Typography:** Configured `cormorant` font family in both `tailwind.config.js` and `tailwind.config.ts`.
+    - **Local Asset Hosting:** Placed all high-resolution photography locally under `apps/storefront/public/about/` (`hero-curated.jpg`, `artist-dan-covert.jpg`, `advisor-white-gloves.jpg`, `original-artwork-perrote.jpg`, `gallery-space.jpg`), preventing external CDN reliance and Next.js unconfigured host errors.
+    - **Studio Philosophy Callout:** Added closing quotation banner (*"The only thing that matters is that your artwork brings warmth, joy, and inspiration into your everyday space."*) with dual CTAs to explore artworks or request bespoke commissions.
+
 ---
 
 ## 6. Current Roadmap & Next Steps
 
-1. **Payment Gateway Integration:**
-   - [ ] Medusa Stripe payment module configuration in `medusa-config.ts`.
-   - [ ] Connect Stripe Elements in `/checkout` with `NEXT_PUBLIC_STRIPE_KEY`.
+1. **Payment Gateway Integration (Stripe):**
+   - [ ] Install and configure `@medusajs/payment-stripe` payment module in `apps/backend/medusa-config.ts`.
+   - [ ] Connect Stripe Elements into `apps/storefront/src/components/CheckoutFlow.tsx` with `NEXT_PUBLIC_STRIPE_KEY`.
+   - [ ] Configure Medusa Stripe webhook handler for asynchronous payment events (`payment_intent.succeeded`, `payment_intent.payment_failed`).
+   - [ ] Set `STRIPE_API_KEY` and `STRIPE_WEBHOOK_SECRET` in backend `.env`.
 
-2. **Custom Backend Artwork Attributes:**
-   - [ ] Extend Medusa product entity with custom art attributes: `artist_name`, `medium`, `dimensions`, `certificate_of_authenticity`.
-   - [ ] Surface metadata directly in Store API `/store/products` responses.
+2. **Custom Backend Artwork Attributes & Admin Extensions:**
+   - [ ] Extend Medusa product entity / create custom module for art attributes: `artist_name`, `medium`, `dimensions`, `certificate_of_authenticity`, `edition`, `year_created`.
+   - [ ] Generate and apply database migrations (`npx medusa db:generate`, `npx medusa db:migrate`).
+   - [ ] Build custom admin widgets under `apps/backend/src/admin/widgets/` for easy metadata editing in the Medusa Admin Dashboard.
+   - [ ] Expose metadata in `/store/products` and wire dynamically to artwork detail pages (`artworks/[handle]/page.tsx`) and filter bar (`BrowseFilters.tsx`).
 
-3. **Notification & Email Workflows:**
-   - [ ] Connect inquiry form (`/api/inquiry`) and newsletter signups to email service (Resend / SendGrid).
-   - [ ] Automated order confirmation and tracking email workflows.
+3. **Low-Friction Authentication & Email Verification (Option C Magic Link):**
+   - [ ] Implement short-lived signed magic link request and verification actions (`requestPasswordlessLink`, `verifyPasswordlessToken`) with Resend dispatch.
+   - [ ] Wire seamless magic link verification directly into `/checkout` contact step with atomic cart transfer (`transferCart`), eliminating registration friction while preserving guest carts.
+
+4. **Automated Notification & Email Workflows:**
+   - [x] Password reset emails via Resend (`apps/backend/src/subscribers/password-reset.ts`).
+   - [ ] Connect artwork inquiries, commission requests, and contact submissions in `/api/inquiry` to Resend studio notifications.
+   - [ ] Connect newsletter subscription (`NewsletterForm.tsx`) to an email marketing audience / provider.
+   - [ ] Implement transactional order confirmation (`order.placed`) and shipping notification (`order.fulfillment_created`) event subscribers.
+
+5. **Pre-Launch Infrastructure & Edge Security:**
+   - [ ] Database regional migration: Move Supabase PostgreSQL from Sydney (`aws-0-ap-southeast-2`) to Mumbai (`ap-south-1`) or Singapore (`ap-southeast-1`) to eliminate physical database network latency.
+   - [ ] Configure Cloudflare WAF rate limiting on `/auth/*`, `/account`, and `/api/inquiry` (or `@upstash/ratelimit` distributed middleware).
+   - [ ] Set up production CI/CD pipelines (Vercel for Storefront, Railway / Fly.io for Backend).
 
 ---
 
-## 7. Ready-to-Use Prompts for Claude
+## 7. Ready-to-Use Prompts for Claude / Assistant
 
-Copy and paste any of the following prompts into Claude along with this document:
+Copy and paste any of the following prompts into your assistant along with this document:
 
 ### Prompt A: Adding Custom Artwork Attributes to Medusa v2 Products
 ```text
@@ -202,12 +271,14 @@ I want to extend Medusa products to support art-specific fields:
 - medium (string, e.g., "Acrylic on Canvas", "Giclée Print")
 - dimensions (string, e.g., "24x36 in")
 - certificate_of_authenticity (boolean)
+- edition (string, e.g., "Original 1 of 1")
+- year_created (integer)
 
 Please show me how to:
 1. Create a custom module or extend the product module in Medusa v2.
 2. Define the schema and run migrations (using npx medusa db:generate).
 3. Expose these fields in the Store API (/store/products).
-4. Display them on the artwork detail page in apps/storefront/src/app/artworks/[handle]/page.tsx.
+4. Display them on the artwork detail page in apps/storefront/src/app/artworks/[handle]/page.tsx and in BrowseFilters.tsx.
 ```
 
 ### Prompt B: Setting Up Stripe Payments in Medusa v2 & Next.js Storefront
@@ -217,5 +288,22 @@ Refer to PROJECT_PROGRESS.md for my Medusa v2 monorepo setup.
 I need to configure Stripe payment processing for both backend and storefront:
 1. What Medusa v2 payment module should I add in apps/backend/medusa-config.ts?
 2. What environment variables are required in apps/backend/.env and apps/storefront/.env.local?
-3. How do I ensure the checkout step in apps/storefront/src/app/checkout/page.tsx loads the Stripe Elements form properly?
+3. How do I ensure the checkout step in apps/storefront/src/components/CheckoutFlow.tsx loads the Stripe Elements form properly and handles payment confirmation?
+```
+
+### Prompt C: Implementing Option C Passwordless / Magic Link at Checkout
+```text
+Refer to PROJECT_PROGRESS.md and docs/AUTHENTICATION_AND_AUTHORIZATION.md for my Medusa v2 monorepo setup.
+
+I want to implement Option C (Passwordless / Magic Link at Checkout):
+1. Create Server Actions requestPasswordlessLink(email, cartId) and verifyPasswordlessToken(token) using signed 10-minute JWTs.
+2. Build an editorial Resend email template dispatching the magic link.
+3. Implement the /checkout/verify route to validate the token, issue the _medusa_jwt cookie, and atomically link the guest cart via transferCart.
+```
+
+### Prompt D: Connecting Studio Inquiries & Commission Forms to Resend
+```text
+Refer to PROJECT_PROGRESS.md for my Medusa v2 monorepo setup.
+
+I want to connect apps/storefront/src/app/api/inquiry/route.ts to Resend so that whenever a buyer submits a custom commission request, contact message, or artwork consultation, a branded notification email is instantly delivered to the studio team.
 ```

@@ -24,7 +24,10 @@ const getCleanHostname = (input) => {
 }
 
 const R2_HOSTNAME = getCleanHostname(
-  process.env.R2_PUBLIC_HOSTNAME || process.env.R2_FILE_URL
+  process.env.R2_PUBLIC_HOSTNAME ||
+  process.env.R2_FILE_URL ||
+  process.env.NEXT_PUBLIC_R2_PUBLIC_HOSTNAME ||
+  process.env.NEXT_PUBLIC_R2_FILE_URL
 )
 
 
@@ -84,6 +87,10 @@ const nextConfig = {
         protocol: "https",
         hostname: "**.medusajs.com",
       },
+      {
+        protocol: "https",
+        hostname: "*.r2.dev",
+      },
       ...(S3_HOSTNAME && S3_PATHNAME
         ? [
             {
@@ -93,7 +100,7 @@ const nextConfig = {
             },
           ]
         : []),
-      ...(R2_HOSTNAME
+      ...(R2_HOSTNAME && R2_HOSTNAME !== "*.r2.dev"
         ? [
             {
               protocol: "https",
@@ -109,7 +116,7 @@ const nextConfig = {
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
-      `img-src 'self' data: blob: http://localhost:* https://*.s3.*.amazonaws.com https://*.s3.amazonaws.com https://res.cloudinary.com https://*.medusajs.com ${R2_HOSTNAME ? `https://${R2_HOSTNAME}` : ""}`.trim(),
+      `img-src 'self' data: blob: http://localhost:* https://*.s3.*.amazonaws.com https://*.s3.amazonaws.com https://res.cloudinary.com https://*.medusajs.com https://*.r2.dev ${R2_HOSTNAME ? `https://${R2_HOSTNAME}` : ""}`.trim(),
       `connect-src 'self' http://localhost:9000 http://127.0.0.1:9000 ${process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || ""}`.trim(),
       "frame-ancestors 'self'",
       "base-uri 'self'",
