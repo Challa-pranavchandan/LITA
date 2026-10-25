@@ -13,8 +13,13 @@ import {
   Text,
 } from "@medusajs/ui"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import React, { useState } from "react"
 import { sdk } from "../../lib/sdk"
+
+// Cast Table.Cell to include TdHTMLAttributes (such as colSpan)
+const TableCell = Table.Cell as React.ForwardRefExoticComponent<
+  React.TdHTMLAttributes<HTMLTableCellElement> & React.RefAttributes<HTMLTableCellElement>
+>
 
 type JournalPost = {
   id: string
@@ -217,17 +222,17 @@ const JournalPage = () => {
           <Table.Body>
             {isLoading && (
               <Table.Row>
-                <Table.Cell colSpan={5} className="text-center py-8 text-ui-fg-muted">
+                <TableCell colSpan={5} className="text-center py-8 text-ui-fg-muted">
                   Loading journal posts...
-                </Table.Cell>
+                </TableCell>
               </Table.Row>
             )}
 
             {!isLoading && (!data?.posts || data.posts.length === 0) && (
               <Table.Row>
-                <Table.Cell colSpan={5} className="text-center py-10 text-ui-fg-muted">
+                <TableCell colSpan={5} className="text-center py-10 text-ui-fg-muted">
                   No journal posts yet. Click &quot;New Post&quot; to write your first story.
-                </Table.Cell>
+                </TableCell>
               </Table.Row>
             )}
 
