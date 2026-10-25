@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCustomer, listOrders } from "@/lib/data/customer";
 import { getCustomerTradeApplication } from "@/lib/data/trade";
+import { getCustomerCommissions } from "@/lib/data/commission";
 import { AccountDashboard } from "@/components/auth/AccountDashboard";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +18,10 @@ export default async function AccountPage() {
     redirect("/login?next=/account");
   }
 
-  const [orders, tradeApplication] = await Promise.all([
+  const [orders, tradeApplication, commissions] = await Promise.all([
     listOrders(),
     getCustomerTradeApplication(customer.email),
+    getCustomerCommissions(),
   ]);
 
   return (
@@ -28,6 +30,7 @@ export default async function AccountPage() {
         customer={customer}
         orders={orders}
         tradeApplication={tradeApplication}
+        commissions={commissions}
       />
     </div>
   );

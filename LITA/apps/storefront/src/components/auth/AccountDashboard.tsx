@@ -5,23 +5,28 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { HttpTypes } from "@medusajs/types";
 import { logout, changePassword, updateProfile } from "@/lib/data/customer";
-import { formatMoney } from "@/lib/format";
 import type { TradeApplication } from "@/lib/data/trade";
+import type { Commission } from "@/lib/data/commission";
 import { TradeApplicationModal } from "@/components/TradeApplicationModal";
+import { CommissionsAccountTab } from "@/components/auth/CommissionsAccountTab";
 
 export function AccountDashboard({
   customer,
   orders,
   tradeApplication,
+  commissions = [],
 }: {
   customer: HttpTypes.StoreCustomer;
   orders: HttpTypes.StoreOrder[];
   tradeApplication?: TradeApplication | null;
+  commissions?: Commission[];
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"orders" | "trade" | "profile" | "password">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "commissions" | "trade" | "profile" | "password">("orders");
   const [tradeApp, setTradeApp] = useState<TradeApplication | null>(tradeApplication || null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const commissionsList = commissions;
+  const quotedCount = commissionsList.filter((c) => c.status === "quoted").length;
 
   // Profile update state
   const [firstName, setFirstName] = useState(customer.first_name || "");
@@ -121,6 +126,15 @@ export function AccountDashboard({
           [
             { id: "orders", label: `Order History (${orders.length})` },
             {
+              id: "commissions",
+              label: `Commissions (${commissionsList.length})`,
+              badge: quotedCount > 0 ? (
+                <span className="ml-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-amber-50 text-amber-900 border border-amber-300 animate-pulse">
+                  Quote Ready
+                </span>
+              ) : null,
+            },
+            {
               id: "trade",
               label: "Trade Program",
               badge: tradeApp ? (
@@ -219,6 +233,13 @@ export function AccountDashboard({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tab: Commissions */}
+      {activeTab === "commissions" && (
+        <div className="space-y-6">
+          <CommissionsAccountTab initialCommissions={commissionsList} />
         </div>
       )}
 

@@ -85,6 +85,9 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/trade",
     },
+    {
+      resolve: "./src/modules/commission",
+    },
     ...(isR2Configured
       ? [
           {

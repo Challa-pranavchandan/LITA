@@ -72,10 +72,11 @@ const TradeApplicationsPage = () => {
         <div className="flex items-center gap-3">
           <div className="w-40">
             <Select
+              size="small"
               value={statusFilter}
               onValueChange={(val) => setStatusFilter(val)}
             >
-              <Select.Trigger size="small">
+              <Select.Trigger>
                 <Select.Value placeholder="Filter by status" />
               </Select.Trigger>
               <Select.Content>

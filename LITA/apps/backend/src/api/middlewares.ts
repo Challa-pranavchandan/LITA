@@ -113,5 +113,21 @@ export default defineMiddlewares({
       method: "POST",
       middlewares: [validateAndTransformBody(UpdateTradeApplicationSchema)],
     },
+    {
+      matcher: "/store/commissions",
+      middlewares: [
+        authenticate("customer", ["bearer", "session"], {
+          allowUnauthenticated: true,
+        }),
+      ],
+    },
+    {
+      matcher: "/store/commissions/*",
+      middlewares: [
+        authenticate("customer", ["bearer", "session"], {
+          allowUnauthenticated: true,
+        }),
+      ],
+    },
   ],
 })

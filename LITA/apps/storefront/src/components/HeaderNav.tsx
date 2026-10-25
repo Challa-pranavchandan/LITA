@@ -377,13 +377,22 @@ export function HeaderNav({
                       For Trade
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      href="/commissions"
+                      onClick={() => setActiveMenu(null)}
+                      className="text-[#222222] hover:text-black transition-colors block"
+                    >
+                      Bespoke Commissions
+                    </Link>
+                  </li>
                   <li className="pt-1">
                     <Link
                       href="/commissions"
                       onClick={() => setActiveMenu(null)}
                       className="text-[#111111] underline underline-offset-4 font-normal block hover:opacity-75"
                     >
-                      All Services
+                      All Advisory Services
                     </Link>
                   </li>
                 </ul>

@@ -305,6 +305,23 @@
       - ⚪ **Not Enrolled:** Displays an invitation card highlighting trade advantages with an **Apply for Trade Program** action opening the modal with prefilled customer details.
     - **Profile Overview & Localized Profile Integration:** Added a Trade Program Membership summary card inside the *Profile & Preferences* tab in `AccountDashboard.tsx` and in `apps/storefront/src/app/[countryCode]/(main)/account/@dashboard/profile/page.tsx`.
 
+21. **Custom Commission Module (Next.js + Medusa v2 + Cloudflare R2):**
+    - **Custom Medusa v2 Commission Module:** Created `Commission` and `CommissionMessage` models in `apps/backend/src/modules/commission/` using `@medusajs/framework/utils` DML. Supports lifecycle statuses (`new` -> `in_discussion` -> `quoted` -> `accepted` -> `converted`, plus `rejected`, `cancelled`), customer ID indexing, quote pricing, currency code, and JSON reference image metadata. Registered module in `medusa-config.ts`.
+    - **Database Migration:** Generated and applied migration `Migration20261025154731.ts` creating `commission` and `commission_message` tables with indexes on Supabase PostgreSQL.
+    - **Direct Cloudflare R2 Integration:** Built `apps/backend/src/lib/r2.ts` with S3-compatible client generating short-lived presigned PUT URLs for browser direct uploads and short-lived presigned GET URLs for secure, private reference image viewing.
+    - **Store & Admin API Routes:**
+      - `POST /store/commissions/upload-url`: Protected upload link generator validating MIME types (`image/jpeg`, `image/png`, `image/webp`), 10MB file limit, and key path isolation (`commissions/${customerId}/...`).
+      - `POST /store/commissions` & `GET /store/commissions`: Customer commission submission with image ownership validation and list fetching with presigned image URLs.
+      - `GET /store/commissions/:id`, `POST /store/commissions/:id/accept`, `POST /store/commissions/:id/messages`: Single commission detail, one-click quote acceptance, and client negotiation messages.
+      - `GET /admin/commissions` & `GET /admin/commissions/:id`: Admin listing with customer profile resolution, status and text search filtering, and image presigned previews.
+      - `POST /admin/commissions/:id` & `POST /admin/commissions/:id/messages`: Admin status updates, quote pricing inputs, and negotiation message dispatch.
+      - `POST /admin/commissions/:id/convert`: Converts accepted commissions into Medusa draft orders.
+    - **Atomic Conversion Workflow:** Implemented `apps/backend/src/workflows/convert-commission-to-order.ts` using `@medusajs/framework/workflows-sdk` and `createOrderWorkflow` with `OrderStatus.DRAFT`, `is_draft_order: true`, unit price override, and double-conversion guards.
+    - **Admin Dashboard UI:** Created administrative interface at `apps/backend/src/admin/routes/commissions/page.tsx` with sidebar navigation (`Sparkles` icon), real-time TanStack query fetching, search/filter table, reference image gallery preview, quote & status manager, discussion thread, and Convert to Order modal.
+    - **Storefront Client UI & Account Tab:**
+      - Upgraded `/commissions` with editorial 3-step process cards and `CommissionRequestForm.tsx` supporting drag-and-drop R2 uploads with live progress.
+      - Extended `/account` (`AccountDashboard.tsx`) with a dedicated **Commissions** tab, status timeline tracker, quote acceptance card with INR formatting, and two-way studio chat.
+
 ---
 
 ## 6. Current Roadmap & Next Steps
