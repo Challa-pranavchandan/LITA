@@ -44,36 +44,36 @@ export function HeaderNav({
   const displayMediums =
     categories.length > 0
       ? categories.slice(0, 8).map((c) => ({
-          label: c.name,
-          href: `/artworks?category=${c.handle}`,
-        }))
+        label: c.name,
+        href: `/artworks?category=${c.handle}`,
+      }))
       : [
-          { label: "Painting", href: "/artworks?category=paintings" },
-          { label: "Drawing", href: "/artworks?category=drawings" },
-          { label: "Sculpture", href: "/artworks?category=sculptures" },
-          { label: "Print", href: "/artworks?category=prints" },
-          { label: "Photography", href: "/artworks?category=photography" },
-          { label: "Installation", href: "/artworks?category=installations" },
-          { label: "Mixed-Media", href: "/artworks?category=mixed-media" },
-        ];
+        { label: "Painting", href: "/artworks?category=paintings" },
+        { label: "Drawing", href: "/artworks?category=drawings" },
+        { label: "Sculpture", href: "/artworks?category=sculptures" },
+        { label: "Print", href: "/artworks?category=prints" },
+        { label: "Photography", href: "/artworks?category=photography" },
+        { label: "Installation", href: "/artworks?category=installations" },
+        { label: "Mixed-Media", href: "/artworks?category=mixed-media" },
+      ];
 
   // Fallback collections if no collections from backend
   const displayCollections =
     collections.length > 0
       ? collections.slice(0, 8).map((c) => ({
-          label: c.title,
-          href: `/collections/${c.handle}`,
-        }))
+        label: c.title,
+        href: `/collections/${c.handle}`,
+      }))
       : [
-          { label: "Focus", href: "/collections" },
-          { label: "Collaborator's Picks", href: "/collections" },
-          { label: "Realism", href: "/collections" },
-          { label: "Color", href: "/collections" },
-          { label: "Neutral", href: "/collections" },
-          { label: "Large-Scale Statements", href: "/collections" },
-          { label: "Diptychs & Triptychs", href: "/collections" },
-          { label: "Unconventional Shapes", href: "/collections" },
-        ];
+        { label: "Focus", href: "/collections" },
+        { label: "Collaborator's Picks", href: "/collections" },
+        { label: "Realism", href: "/collections" },
+        { label: "Color", href: "/collections" },
+        { label: "Neutral", href: "/collections" },
+        { label: "Large-Scale Statements", href: "/collections" },
+        { label: "Diptychs & Triptychs", href: "/collections" },
+        { label: "Unconventional Shapes", href: "/collections" },
+      ];
 
   return (
     <div className="contents">

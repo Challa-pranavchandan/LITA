@@ -181,7 +181,7 @@ export function Footer() {
                       </Link>
                     </li>
                     <li>
-                      <Link href="/about#journal" className="hover:text-black transition-colors">
+                      <Link href="/journal" className="hover:text-black transition-colors">
                         Journal
                       </Link>
                     </li>

@@ -1,12 +1,21 @@
-import { configureStoreSearch, defineMiddlewares } from '@medusajs/framework/http'
+import { configureStoreSearch, defineMiddlewares, validateAndTransformBody } from "@medusajs/framework/http"
+import { z } from "@medusajs/framework/zod"
 
-// The product index declares filterable `status` and `sales_channel_ids`, so
-// the route narrows it to published products in the key's sales channels.
+const PostSchema = z.object({
+  title: z.string().min(1),
+  slug: z.string().min(1),
+  content: z.string().min(1),
+  excerpt: z.string().optional().nullable(),
+  cover_image_url: z.string().optional().nullable(),
+  status: z.enum(["draft", "published"]).optional(),
+  tags: z.array(z.string()).optional().nullable(),
+})
+
 export default defineMiddlewares({
   routes: [
     {
-      method: ['POST'],
-      matcher: '/store/search',
+      method: ["POST"],
+      matcher: "/store/search",
       middlewares: [
         configureStoreSearch({
           allowed_indexes: {
@@ -14,6 +23,16 @@ export default defineMiddlewares({
           },
         }),
       ],
+    },
+    {
+      matcher: "/admin/journal",
+      method: "POST",
+      middlewares: [validateAndTransformBody(PostSchema)],
+    },
+    {
+      matcher: "/admin/journal/:id",
+      method: "POST",
+      middlewares: [validateAndTransformBody(PostSchema.partial())],
     },
   ],
 })

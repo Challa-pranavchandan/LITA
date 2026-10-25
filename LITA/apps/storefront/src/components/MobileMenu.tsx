@@ -260,6 +260,16 @@ export function MobileMenu({
                 </div>
               )}
             </div>
+
+            {/* Journal Direct Link */}
+            <div>
+              <Link
+                href="/journal"
+                className="w-full flex items-center justify-between px-6 py-4 text-[16px] text-[#111111] hover:bg-gray-50 transition-colors"
+              >
+                <span>Journal</span>
+              </Link>
+            </div>
           </div>
 
           {/* Account & Quick Links at bottom */}

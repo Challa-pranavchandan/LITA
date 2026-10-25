@@ -76,6 +76,9 @@ module.exports = defineConfig({
     }
   },
   modules: [
+    {
+      resolve: "./src/modules/journal",
+    },
     ...(isR2Configured
       ? [
           {

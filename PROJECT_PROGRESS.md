@@ -225,6 +225,15 @@ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
     - **Local Asset Hosting:** Placed all high-resolution photography locally under `apps/storefront/public/about/` (`hero-curated.jpg`, `artist-dan-covert.jpg`, `advisor-white-gloves.jpg`, `original-artwork-perrote.jpg`, `gallery-space.jpg`), preventing external CDN reliance and Next.js unconfigured host errors.
     - **Studio Philosophy Callout:** Added closing quotation banner (*"The only thing that matters is that your artwork brings warmth, joy, and inspiration into your everyday space."*) with dual CTAs to explore artworks or request bespoke commissions.
 
+15. **Blog-Style Admin & Storefront Journal Feature (Branch `feature/r2-file-storage`):**
+    - **Custom Medusa v2 Journal Module:** Created custom module at `apps/backend/src/modules/journal` with `JournalPost` model (title, slug, excerpt, markdown content, cover_image_url, status ["draft", "published"], published_at, tags) using Medusa's DML and `MedusaService`. Registered module in `medusa-config.ts`.
+    - **Database Migration:** Generated and ran migration `Migration20261025042417` creating PostgreSQL table `journal_post` with unique slug index and soft delete support.
+    - **Transactional Workflows:** Implemented `createJournalPostWorkflow`, `updateJournalPostWorkflow`, and `deleteJournalPostWorkflow` with automatic rollback compensation and automatic `published_at` timestamp setting upon first publication.
+    - **Admin & Store API Endpoints:** Built authenticated admin endpoints (`GET /admin/journal`, `POST /admin/journal`, `GET /admin/journal/:id`, `POST /admin/journal/:id`, `DELETE /admin/journal/:id`) and public store endpoints (`GET /store/journal`, `GET /store/journal/:slug`).
+    - **Input Validation Middleware:** Added strict Zod request schema validation in `apps/backend/src/api/middlewares.ts` for admin creation and partial update mutations.
+    - **Medusa Admin Dashboard UI:** Built full CRUD interface under `apps/backend/src/admin/routes/journal/page.tsx` featuring a posts table with status badges and an editorial `FocusModal` for authoring markdown articles, previewing metadata, and managing publication state.
+    - **Editorial Storefront Experience:** Built `/journal` index page (`apps/storefront/src/app/journal/page.tsx`) with featured story banner and responsive 3-column article cards, plus dedicated `/journal/[slug]` detail page with `react-markdown` styling, SEO metadata generation, and studio attribution. Integrated Journal navigation across `HeaderNav`, `MobileMenu`, and `Footer`.
+
 ---
 
 ## 6. Current Roadmap & Next Steps
