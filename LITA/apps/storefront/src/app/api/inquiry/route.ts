@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server";
 
 type Payload = {
-  kind?: "newsletter" | "commission" | "artwork" | "contact";
+  kind?: "newsletter" | "commission" | "artwork" | "contact" | "trade";
   name?: string;
   email?: string;
   message?: string;
   budget?: string;
   artwork?: string;
+  company?: string;
+  role?: string;
+  phone?: string;
+  website?: string;
 };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Receives newsletter sign-ups, commission requests, artwork inquiries and contact
- * messages. Set INQUIRY_WEBHOOK_URL (a Slack, Discord, Zapier or Make webhook, or your own
- * endpoint) to forward each submission. Without it, submissions are logged on the server.
+ * Receives newsletter sign-ups, commission requests, artwork inquiries, trade applications
+ * and contact messages. Set INQUIRY_WEBHOOK_URL (a Slack, Discord, Zapier or Make webhook,
+ * or your own endpoint) to forward each submission. Without it, submissions are logged on the server.
  */
 export async function POST(req: Request) {
   let body: Payload;
@@ -28,8 +32,8 @@ export async function POST(req: Request) {
   if (!EMAIL.test(email)) {
     return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   }
-  if (body.kind !== "newsletter" && !body.message?.trim()) {
-    return NextResponse.json({ error: "Add a short message." }, { status: 400 });
+  if (body.kind !== "newsletter" && !body.message?.trim() && !body.company?.trim()) {
+    return NextResponse.json({ error: "Add a short message or project details." }, { status: 400 });
   }
 
   const submission = {
@@ -39,6 +43,10 @@ export async function POST(req: Request) {
     message: body.message?.slice(0, 4000),
     budget: body.budget?.slice(0, 60),
     artwork: body.artwork?.slice(0, 200),
+    company: body.company?.slice(0, 120),
+    role: body.role?.slice(0, 100),
+    phone: body.phone?.slice(0, 50),
+    website: body.website?.slice(0, 200),
     receivedAt: new Date().toISOString(),
   };
 

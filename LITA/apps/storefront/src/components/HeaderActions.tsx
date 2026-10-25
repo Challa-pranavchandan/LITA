@@ -11,13 +11,16 @@ import {
 } from "@/components/livinIcons";
 import { CartDrawer } from "@/components/CartDrawer";
 import { useSaved } from "@/lib/saved";
+import { clearStaleCart } from "@/lib/data/cart";
 
 export function HeaderActions({
   cart,
   customer,
+  hasStaleCart,
 }: {
   cart: any;
   customer: any;
+  hasStaleCart?: boolean;
 }) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -26,6 +29,12 @@ export function HeaderActions({
 
   const savedIds = useSaved();
   const savedCount = savedIds.length;
+
+  useEffect(() => {
+    if (hasStaleCart) {
+      clearStaleCart();
+    }
+  }, [hasStaleCart]);
 
   useEffect(() => {
     if (searchOpen) {

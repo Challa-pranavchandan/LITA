@@ -19,18 +19,39 @@ function message(e: unknown): string {
   return "Something went wrong. Try again.";
 }
 
+function isCartNotFoundError(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const msg = "message" in e ? String((e as any).message) : "";
+  const status = "status" in e ? (e as any).status : undefined;
+  return status === 404 || msg.toLowerCase().includes("not found");
+}
+
 async function cartId(): Promise<string | undefined> {
-  return (await cookies()).get(CART_COOKIE)?.value;
+  const cookieStore = await cookies();
+  return cookieStore.get(CART_COOKIE)?.value ?? cookieStore.get("_medusa_cart_id")?.value;
 }
 
 async function setCartCookie(id: string) {
-  (await cookies()).set(CART_COOKIE, id, {
+  const cookieStore = await cookies();
+  const options = {
     maxAge: 60 * 60 * 24 * 14,
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
-  });
+  };
+  cookieStore.set(CART_COOKIE, id, options);
+  cookieStore.set("_medusa_cart_id", id, options);
+}
+
+export async function clearStaleCart(): Promise<void> {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete(CART_COOKIE);
+    cookieStore.delete("_medusa_cart_id");
+  } catch {
+    // Cannot mutate cookies in pure Server Component render contexts
+  }
 }
 
 export async function getCart(): Promise<HttpTypes.StoreCart | null> {
@@ -39,7 +60,10 @@ export async function getCart(): Promise<HttpTypes.StoreCart | null> {
   try {
     const { cart } = await sdk.store.cart.retrieve(id, { fields: CART_FIELDS });
     return cart;
-  } catch {
+  } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+    }
     return null;
   }
 }
@@ -90,6 +114,11 @@ export async function updateLineItem(
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -102,6 +131,11 @@ export async function deleteLineItem(lineId: string): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -113,7 +147,12 @@ export async function applyPromoCode(code: string): Promise<ActionResult> {
     await sdk.store.cart.update(id, { promo_codes: [code.trim()] });
     refresh();
     return { ok: true };
-  } catch {
+  } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: "That code isn't valid for this bag." };
   }
 }
@@ -130,6 +169,11 @@ export async function removePromoCode(code: string): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -160,6 +204,11 @@ export async function saveAddress(input: AddressInput): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -187,6 +236,11 @@ export async function chooseShipping(optionId: string): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -216,6 +270,11 @@ export async function startPayment(providerId: string): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -240,8 +299,13 @@ export async function placeOrder(): Promise<ActionResult> {
       };
     }
     orderId = res.order.id;
-    (await cookies()).delete(CART_COOKIE);
+    await clearStaleCart();
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
   refresh();
@@ -268,7 +332,10 @@ export async function attachCustomerToCart(): Promise<void> {
   if (!id || !headers.authorization) return;
   try {
     await sdk.store.cart.transferCart(id, {}, headers);
-  } catch {
+  } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+    }
     /* cart is already linked or the session expired; checkout still works as a guest */
   }
 }
@@ -283,8 +350,10 @@ export async function updateRegion(
     if (region) {
       try {
         await sdk.store.cart.update(id, { region_id: region.id });
-      } catch {
-        // ignore
+      } catch (e) {
+        if (isCartNotFoundError(e)) {
+          await clearStaleCart();
+        }
       }
     }
   }

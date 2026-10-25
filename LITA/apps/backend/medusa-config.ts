@@ -82,6 +82,9 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/gallery",
     },
+    {
+      resolve: "./src/modules/trade",
+    },
     ...(isR2Configured
       ? [
           {

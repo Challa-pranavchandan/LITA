@@ -195,11 +195,7 @@ export function Footer() {
                         Contact
                       </Link>
                     </li>
-                    <li>
-                      <Link href="/about#press" className="hover:text-black transition-colors">
-                        Press
-                      </Link>
-                    </li>
+
                     <li>
                       <Link href="/shipping" className="hover:text-black transition-colors">
                         FAQs
@@ -241,10 +237,11 @@ export function Footer() {
                     Visit
                   </h3>
                   <ul className="space-y-2.5 text-[14px] text-[#333333]">
-                    <li>
-                      <Link href="/about" className="hover:text-black transition-colors">
-                        The Gallery
-                      </Link>
+                    <li className="flex items-center gap-2 cursor-not-allowed select-none text-[#555555]">
+                      <span>The Gallery</span>
+                      <span className="text-red-500 text-[12px] font-medium tracking-wide animate-blink-slow">
+                        (coming soon)
+                      </span>
                     </li>
                     <li>
                       <Link href="/collections" className="hover:text-black transition-colors">
@@ -257,27 +254,29 @@ export function Footer() {
                 {/* Trade */}
                 <div className="mt-10 md:mt-12">
                   <h3 className="text-[15px] font-normal text-[#222222] tracking-tight mb-3.5">
-                    Trade
+                    <Link href="/trade" className="hover:text-black transition-colors">
+                      Trade
+                    </Link>
                   </h3>
                   <ul className="space-y-2.5 text-[14px] text-[#333333]">
                     <li>
-                      <Link href="/contact?topic=interior-designers" className="hover:text-black transition-colors">
+                      <Link href="/trade" className="hover:text-black transition-colors font-medium text-[#111111]">
+                        Trade Program Overview
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/trade#interior-designers" className="hover:text-black transition-colors">
                         Interior Designers
                       </Link>
                     </li>
                     <li>
-                      <Link href="/contact?topic=architects" className="hover:text-black transition-colors">
+                      <Link href="/trade#architects" className="hover:text-black transition-colors">
                         Architects
                       </Link>
                     </li>
                     <li>
-                      <Link href="/contact?topic=real-estate" className="hover:text-black transition-colors">
+                      <Link href="/trade#real-estate-developers" className="hover:text-black transition-colors">
                         Real Estate Developers
-                      </Link>
-                    </li>
-                    <li>
-                      <Link href="/contact?topic=art-consultants" className="hover:text-black transition-colors">
-                        Art Consultants
                       </Link>
                     </li>
                   </ul>

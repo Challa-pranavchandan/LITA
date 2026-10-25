@@ -367,27 +367,10 @@ export function HeaderNav({
                   Advisory
                 </p>
                 <ul className="space-y-2.5 text-[14px]">
+
                   <li>
                     <Link
-                      href="/commissions"
-                      onClick={() => setActiveMenu(null)}
-                      className="text-[#222222] hover:text-black transition-colors block"
-                    >
-                      For Individuals
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/commissions"
-                      onClick={() => setActiveMenu(null)}
-                      className="text-[#222222] hover:text-black transition-colors block"
-                    >
-                      For Companies
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/commissions"
+                      href="/trade"
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >

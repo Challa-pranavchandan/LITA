@@ -105,6 +105,9 @@
 | **Database** | Supabase PostgreSQL | **CONNECTED** | Remote pooled connection via SSL (`port 6543`) |
 | **Store Regions** | `GET /store/regions` | **OPERATIONAL** | Returns configured regions |
 | **Cloudflare R2 Storage** | S3 API Endpoint | **OPERATIONAL** | Verified via `npm run test:r2` diagnostic upload script |
+| **Trade Program Admin** | `http://localhost:9000/app/trade-applications` | **OPERATIONAL** | Review, filter, approve and reject trade applications |
+| **Storefront Trade Page** | `http://localhost:8000/trade` | **HEALTHY (200 OK)** | Trade Program editorial showcase & modal application form |
+| **Profile Trade Status** | `http://localhost:8000/account` | **HEALTHY (200 OK)** | Live Trade Program tab with status badges and privileges |
 
 ---
 
@@ -282,6 +285,26 @@
     - **Root Cause:** Encountered TypeScript compiler error `TS2353: Object literal may only specify known properties, and 'context' does not exist in type 'StoreInitializePaymentSession'` in `apps/storefront/src/lib/data/cart.ts:L329`. In Medusa v2 SDK, the request payload interface expects `provider_id: string` and optional `data?: Record<string, unknown>`, whereas older callers and v1 patterns passed `context`.
     - **Resolution:** Updated `initiatePaymentSession()` in `apps/storefront/src/lib/data/cart.ts` to map `sessionData = data.data ?? data.context` and pass `{ provider_id: data.provider_id, ...(sessionData ? { data: sessionData } : {}) }`. This conforms strictly to the `StoreInitializePaymentSession` type while retaining seamless backward-compatibility for callers passing either key.
 
+19. **Medusa v2 Trade Program Module & Admin Panel Integration:**
+    - **Custom Medusa v2 Trade Module:** Created custom module at `apps/backend/src/modules/trade` with `TradeApplication` model (`name`, `email`, `company`, `role`, `phone`, `website`, `message`, `status: ["pending", "approved", "rejected"]`) using `@medusajs/framework/utils` DML and `MedusaService`. Registered module in `apps/backend/medusa-config.ts`.
+    - **Database Migration:** Generated and applied migration `Migration20261025141927.ts` via `npx medusa db:generate trade` and `npx medusa db:migrate`, persisting trade applications to Supabase PostgreSQL.
+    - **Storefront & Admin API Routes:**
+      - `POST /store/trade-applications`: Public submission endpoint with publishable key authentication and Zod schema validation (`PostTradeApplicationSchema`) requiring valid email and name, with role, company, phone, website, and message.
+      - `GET /admin/trade-applications`: Authenticated admin listing route returning applications ordered newest first with optional `?status=` filtering and total counts.
+      - `POST /admin/trade-applications/:id`: Authenticated admin route for updating application status (`approved`, `rejected`, `pending`) with Zod validation.
+    - **Medusa Admin Dashboard UI:** Built dedicated administrative screen at `apps/backend/src/admin/routes/trade-applications/page.tsx` with `defineRouteConfig({ label: "Trade Applications", icon: BuildingStorefront })`. Features real-time TanStack Query data fetching, status filtering dropdown, application count badge, responsive data table, expandable message drawer, and instant one-click **Approve** and **Reject** mutation buttons with toast alerts.
+    - **Storefront Trade Program Landing Page:** Built `/trade` and `/trade-program` (`TradePageContent.tsx`) showcasing trade disciplines (Interior Designers, Real Estate Developers, Architects), advisory process steps (Meet, Artwork Selection, Details), and `TradeApplicationModal.tsx` submitting directly to `/store/trade-applications` via Medusa JS SDK client with loading states, error handling, and success confirmation.
+
+20. **Customer Account & Profile Trade Application Status Integration:**
+    - **Storefront API Endpoint (`GET /store/trade-applications`):** Implemented store route supporting customer authentication (`Bearer` token) and email lookups (`?email=...`) returning the applicant's latest application status, full submission metadata, and application history.
+    - **Server Data Helper:** Created `apps/storefront/src/lib/data/trade.ts` with `getCustomerTradeApplication(email)` to securely query trade application records during server rendering.
+    - **Dedicated Account Dashboard Tab:** Extended `AccountDashboard.tsx` (`/account`) with a prominent **Trade Program** navigation tab featuring real-time status pill badges:
+      - 🟢 **Approved / Active Member:** Displays verified trade membership banner, member privileges (trade discount tier, dedicated advisor moodboards, custom sizing, white-glove delivery), application details summary, and direct link to explore catalog.
+      - 🟡 **Pending Review:** Displays active review status, submission date, applicant and studio info, and advisory desk contact details for expedited project timelines.
+      - 🔴 **Not Approved:** Informs applicant and provides an instant one-click **Re-apply** modal.
+      - ⚪ **Not Enrolled:** Displays an invitation card highlighting trade advantages with an **Apply for Trade Program** action opening the modal with prefilled customer details.
+    - **Profile Overview & Localized Profile Integration:** Added a Trade Program Membership summary card inside the *Profile & Preferences* tab in `AccountDashboard.tsx` and in `apps/storefront/src/app/[countryCode]/(main)/account/@dashboard/profile/page.tsx`.
+
 ---
 
 ## 6. Current Roadmap & Next Steps
@@ -307,13 +330,21 @@
    - [ ] Implement short-lived signed magic link request and verification actions (`requestPasswordlessLink`, `verifyPasswordlessToken`) with Resend dispatch at `/checkout`.
    - [ ] Wire seamless magic link verification directly into `/checkout` contact step with atomic cart transfer (`transferCart`), eliminating registration friction while preserving guest carts.
 
-4. **Automated Notification & Email Workflows:**
+4. **Trade Program & Design Advisory Workflow:**
+   - [x] Custom Medusa v2 `trade` module with PostgreSQL persistence and DML migration.
+   - [x] Storefront Trade Program landing page (`/trade`, `/trade-program`) with editorial role selector.
+   - [x] Medusa Admin Panel route (`/app/trade-applications`) with filtering, message drawer, and instant Approve/Reject actions.
+   - [x] Customer Profile Trade Program tab & real-time application status badges in `AccountDashboard.tsx` and localized profile route.
+   - [ ] Automated email notification upon trade application submission and status updates (approval/rejection) via Resend.
+   - [ ] Link approved trade accounts to dedicated Medusa Customer Groups with automatic trade tier discount pricing.
+
+5. **Automated Notification & Email Workflows:**
    - [x] Password reset emails via Resend (`apps/backend/src/subscribers/password-reset.ts`).
    - [ ] Connect artwork inquiries, commission requests, and contact submissions in `/api/inquiry` to Resend studio notifications.
    - [ ] Connect newsletter subscription (`NewsletterForm.tsx`) to an email marketing audience / provider.
    - [ ] Implement transactional order confirmation (`order.placed`) and shipping notification (`order.fulfillment_created`) event subscribers.
 
-5. **Pre-Launch Infrastructure & Edge Security:**
+6. **Pre-Launch Infrastructure & Edge Security:**
    - [ ] Database regional migration: Move Supabase PostgreSQL from Sydney (`aws-0-ap-southeast-2`) to Mumbai (`ap-south-1`) or Singapore (`ap-southeast-1`) to eliminate physical database network latency.
    - [ ] Configure Cloudflare WAF rate limiting on `/auth/*`, `/account`, and `/api/inquiry` (or `@upstash/ratelimit` distributed middleware).
    - [ ] Set up production CI/CD pipelines (Vercel for Storefront, Railway / Fly.io for Backend).

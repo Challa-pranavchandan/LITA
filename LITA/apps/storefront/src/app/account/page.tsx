@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCustomer, listOrders } from "@/lib/data/customer";
+import { getCustomerTradeApplication } from "@/lib/data/trade";
 import { AccountDashboard } from "@/components/auth/AccountDashboard";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,18 @@ export default async function AccountPage() {
     redirect("/login?next=/account");
   }
 
-  const orders = await listOrders();
+  const [orders, tradeApplication] = await Promise.all([
+    listOrders(),
+    getCustomerTradeApplication(customer.email),
+  ]);
 
   return (
     <div className="bg-white min-h-[calc(100vh-var(--header-h)-120px)] py-12 md:py-16 px-6 md:px-12">
-      <AccountDashboard customer={customer} orders={orders} />
+      <AccountDashboard
+        customer={customer}
+        orders={orders}
+        tradeApplication={tradeApplication}
+      />
     </div>
   );
 }

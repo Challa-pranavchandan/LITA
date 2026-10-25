@@ -10,6 +10,10 @@ const PRODUCT_FIELDS =
 // In-memory cache to prevent repetitive 7+ second roundtrips to remote Supabase DB
 const memoryCache = new Map<string, { data: unknown; expires: number }>();
 
+export function clearCatalogCache() {
+  memoryCache.clear();
+}
+
 function getCached<T>(key: string): T | null {
   const item = memoryCache.get(key);
   if (item && item.expires > Date.now()) {

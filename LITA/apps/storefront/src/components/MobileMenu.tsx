@@ -240,7 +240,7 @@ export function MobileMenu({
                     <ul className="space-y-2">
                       <li><Link href="/commissions" className="text-[#333333] hover:text-black">For Individuals</Link></li>
                       <li><Link href="/commissions" className="text-[#333333] hover:text-black">For Companies</Link></li>
-                      <li><Link href="/commissions" className="text-[#333333] hover:text-black">For Trade</Link></li>
+                      <li><Link href="/trade" className="text-[#333333] hover:text-black">For Trade</Link></li>
                       <li className="pt-1"><Link href="/commissions" className="text-black underline">All Services</Link></li>
                     </ul>
                   </div>

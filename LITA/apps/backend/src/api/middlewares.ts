@@ -1,4 +1,4 @@
-import { configureStoreSearch, defineMiddlewares, validateAndTransformBody } from "@medusajs/framework/http"
+import { authenticate, configureStoreSearch, defineMiddlewares, validateAndTransformBody } from "@medusajs/framework/http"
 import { z } from "@medusajs/framework/zod"
 
 const PostSchema = z.object({
@@ -42,6 +42,20 @@ const UpdateItem = z.object({
   is_published: z.boolean().optional(),
 })
 
+export const PostTradeApplicationSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Valid email is required"),
+  company: z.string().optional().nullable(),
+  role: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  website: z.string().optional().nullable(),
+  message: z.string().optional().nullable(),
+})
+
+export const UpdateTradeApplicationSchema = z.object({
+  status: z.enum(["approved", "rejected", "pending"]),
+})
+
 export default defineMiddlewares({
   routes: [
     {
@@ -79,6 +93,25 @@ export default defineMiddlewares({
       matcher: "/admin/gallery/:id",
       method: "POST",
       middlewares: [validateAndTransformBody(UpdateItem)],
+    },
+    {
+      matcher: "/store/trade-applications",
+      method: "POST",
+      middlewares: [validateAndTransformBody(PostTradeApplicationSchema)],
+    },
+    {
+      matcher: "/store/trade-applications",
+      method: "GET",
+      middlewares: [
+        authenticate("customer", ["bearer", "session"], {
+          allowUnauthenticated: true,
+        }),
+      ],
+    },
+    {
+      matcher: "/admin/trade-applications/:id",
+      method: "POST",
+      middlewares: [validateAndTransformBody(UpdateTradeApplicationSchema)],
     },
   ],
 })
