@@ -18,9 +18,11 @@ type CollectionItem = { title: string; handle: string };
 export function MobileMenu({
   categories = [],
   collections = [],
+  customer,
 }: {
   categories?: CategoryItem[];
   collections?: CollectionItem[];
+  customer?: any;
 }) {
   const [open, setOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -294,9 +296,12 @@ export function MobileMenu({
 
           {/* Account & Quick Links at bottom */}
           <div className="border-t border-[#EAEAEA] p-6 space-y-4 bg-white mt-4">
-            <Link href="/account" className="flex items-center gap-3 text-[15px] text-[#222222] hover:text-black">
+            <Link
+              href={customer ? "/account" : "/login"}
+              className="flex items-center gap-3 text-[15px] text-[#222222] hover:text-black"
+            >
               <UserIcon className="w-5 h-5" />
-              <span>Log In / Sign Up</span>
+              <span>{customer ? "My Account" : "Log In / Register"}</span>
             </Link>
             <Link href="/saved" className="flex items-center gap-3 text-[15px] text-[#222222] hover:text-black">
               <HeartIcon className="w-5 h-5" />

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { ForgotPasswordForm } from "@/components/ForgotPasswordForm";
+import { Suspense } from "react";
+import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -9,9 +10,10 @@ export const metadata: Metadata = {
 
 export default function ForgotPasswordPage() {
   return (
-    <div className="page py-12">
-      <h1 className="mb-4 text-3xl font-medium">Forgot Password</h1>
-      <ForgotPasswordForm />
+    <div className="bg-white min-h-[calc(100vh-var(--header-h)-120px)] flex items-center justify-center py-16 md:py-24 px-6">
+      <Suspense fallback={<div className="w-full max-w-[480px] h-64 bg-[#f4f4f4] animate-pulse" />}>
+        <ForgotPasswordForm />
+      </Suspense>
     </div>
   );
 }

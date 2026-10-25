@@ -85,7 +85,7 @@ export function HeaderActions({
 
         {/* 4. User / Account Icon */}
         <Link
-          href="/account"
+          href={customer ? "/account" : "/login"}
           className="p-1 text-[#222222] hover:opacity-60 transition-opacity"
           aria-label={customer ? "My Account" : "Sign in / Register"}
         >

@@ -18,6 +18,7 @@ module.exports = {
       },
       fontFamily: {
         sans: ['"Familjen Grotesk Variable"', "system-ui", "sans-serif"],
+        hanken: ['"Hanken Grotesk"', '"Familjen Grotesk Variable"', "system-ui", "sans-serif"],
         serif: ['"Literata Variable"', "Georgia", "serif"],
         cormorant: ['"Cormorant Garamond"', "Georgia", "serif"],
       },

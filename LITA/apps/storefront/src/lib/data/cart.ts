@@ -94,6 +94,18 @@ export async function updateLineItem(
   }
 }
 
+export async function deleteLineItem(lineId: string): Promise<ActionResult> {
+  const id = await cartId();
+  if (!id) return { ok: false, error: "Your bag is empty." };
+  try {
+    await sdk.store.cart.deleteLineItem(id, lineId);
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: message(e) };
+  }
+}
+
 export async function applyPromoCode(code: string): Promise<ActionResult> {
   const id = await cartId();
   if (!id) return { ok: false, error: "Your bag is empty." };
@@ -261,4 +273,131 @@ export async function attachCustomerToCart(): Promise<void> {
   }
 }
 
+export async function updateRegion(
+  countryCode: string,
+  currentPath: string
+): Promise<void> {
+  const id = await cartId();
+  if (id) {
+    const region = await getRegion();
+    if (region) {
+      try {
+        await sdk.store.cart.update(id, { region_id: region.id });
+      } catch {
+        // ignore
+      }
+    }
+  }
+  refresh();
+}
+
 export const retrieveCart = getCart;
+
+export async function listCartOptions(): Promise<{
+  shipping_options: HttpTypes.StoreCartShippingOption[];
+}> {
+  const shipping_options = await listShippingOptions();
+  return { shipping_options };
+}
+
+export async function setShippingMethod({
+  cartId: providedCartId,
+  shippingMethodId,
+}: {
+  cartId?: string;
+  shippingMethodId: string;
+}): Promise<ActionResult> {
+  const id = providedCartId || (await cartId());
+  if (!id) return { ok: false, error: "Your bag is empty." };
+  try {
+    await sdk.store.cart.addShippingMethod(id, { option_id: shippingMethodId });
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    throw new Error(message(e));
+  }
+}
+
+export async function initiatePaymentSession(
+  cart: HttpTypes.StoreCart,
+  data: {
+    provider_id: string;
+    context?: Record<string, unknown>;
+    data?: Record<string, unknown>;
+  }
+): Promise<HttpTypes.StorePaymentCollection> {
+  const sessionData = data.data ?? data.context;
+  const { payment_collection } = await sdk.store.payment.initiatePaymentSession(
+    cart,
+    {
+      provider_id: data.provider_id,
+      ...(sessionData ? { data: sessionData } : {}),
+    }
+  );
+  refresh();
+  return payment_collection;
+}
+
+export async function applyPromotions(codes: string[]): Promise<ActionResult> {
+  const id = await cartId();
+  if (!id) return { ok: false, error: "Your bag is empty." };
+  try {
+    await sdk.store.cart.update(id, { promo_codes: codes });
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    throw new Error(message(e));
+  }
+}
+
+export async function setAddresses(
+  _currentState: unknown,
+  formData: FormData
+): Promise<string | null> {
+  const id = await cartId();
+  if (!id) return "Your bag is empty.";
+
+  const email = (formData.get("email") as string) || "";
+  const sameAsBilling = formData.get("same_as_billing") === "on";
+
+  const shipping_address: Record<string, string> = {
+    first_name: (formData.get("shipping_address.first_name") as string) || "",
+    last_name: (formData.get("shipping_address.last_name") as string) || "",
+    company: (formData.get("shipping_address.company") as string) || "",
+    address_1: (formData.get("shipping_address.address_1") as string) || "",
+    address_2: (formData.get("shipping_address.address_2") as string) || "",
+    city: (formData.get("shipping_address.city") as string) || "",
+    country_code: (formData.get("shipping_address.country_code") as string) || "",
+    province: (formData.get("shipping_address.province") as string) || "",
+    postal_code: (formData.get("shipping_address.postal_code") as string) || "",
+    phone: (formData.get("shipping_address.phone") as string) || "",
+  };
+
+  const billing_address: Record<string, string> = sameAsBilling
+    ? shipping_address
+    : {
+        first_name: (formData.get("billing_address.first_name") as string) || "",
+        last_name: (formData.get("billing_address.last_name") as string) || "",
+        company: (formData.get("billing_address.company") as string) || "",
+        address_1: (formData.get("billing_address.address_1") as string) || "",
+        address_2: (formData.get("billing_address.address_2") as string) || "",
+        city: (formData.get("billing_address.city") as string) || "",
+        country_code: (formData.get("billing_address.country_code") as string) || "",
+        province: (formData.get("billing_address.province") as string) || "",
+        postal_code: (formData.get("billing_address.postal_code") as string) || "",
+        phone: (formData.get("billing_address.phone") as string) || "",
+      };
+
+  try {
+    await sdk.store.cart.update(id, {
+      email,
+      shipping_address,
+      billing_address,
+    });
+    refresh();
+    return null;
+  } catch (e) {
+    return message(e);
+  }
+}
+

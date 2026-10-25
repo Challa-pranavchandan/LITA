@@ -27,7 +27,11 @@ export async function Header() {
           {/* Left: Mobile menu toggle (if mobile) + LIVININ THE ART Logo */}
           <div className="flex flex-1 items-center justify-start gap-3">
             <div className="lg:hidden">
-              <MobileMenu categories={categories} collections={collections} />
+              <MobileMenu
+                categories={categories}
+                collections={collections}
+                customer={customer}
+              />
             </div>
             <Link
               href="/"

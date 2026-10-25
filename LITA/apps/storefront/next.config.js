@@ -37,6 +37,12 @@ const path = require("path")
  * @type {import('next').NextConfig}
  */
 const nextConfig = {
+  allowedDevOrigins: [
+    "192.168.55.104",
+    "192.168.55.104:8000",
+    "localhost:8000",
+    "127.0.0.1:8000",
+  ],
   turbopack: {
     root: path.resolve(__dirname, "../../"),
   },

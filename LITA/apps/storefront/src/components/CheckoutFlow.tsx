@@ -34,12 +34,16 @@ export function CheckoutFlow({
   shippingOptions,
   providers,
   customerEmail,
+  customerFirstName,
+  customerLastName,
 }: {
   cart: HttpTypes.StoreCart;
   countries: { iso_2: string; name: string }[];
   shippingOptions: HttpTypes.StoreCartShippingOption[];
   providers: HttpTypes.StorePaymentProvider[];
   customerEmail?: string;
+  customerFirstName?: string;
+  customerLastName?: string;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(() => initialStep(cart));
@@ -49,8 +53,8 @@ export function CheckoutFlow({
   const a = cart.shipping_address;
   const [form, setForm] = useState<AddressInput>({
     email: cart.email ?? customerEmail ?? "",
-    first_name: a?.first_name ?? "",
-    last_name: a?.last_name ?? "",
+    first_name: a?.first_name ?? customerFirstName ?? "",
+    last_name: a?.last_name ?? customerLastName ?? "",
     phone: a?.phone ?? "",
     address_1: a?.address_1 ?? "",
     address_2: a?.address_2 ?? "",

@@ -20,59 +20,77 @@
 ## 2. Directory Structure
 
 ```text
-c:\Users\chall\OneDrive\Desktop\LITA\LITA\
-├── apps/
-│   ├── backend/                           # Medusa v2 Commerce Engine (@dtc/backend)
-│   │   ├── medusa-config.ts               # Core Medusa config: DB URL, CORS, secrets, SSL, R2 S3 provider
-│   │   ├── .env                           # Backend environment variables
-│   │   ├── static/                        # Media assets & local upload storage
-│   │   └── src/
-│   │       ├── admin/                     # Custom admin dashboard widgets & extensions
-│   │       ├── api/                       # File-based API endpoints (store/* and admin/*)
-│   │       ├── jobs/                      # Scheduled background jobs
-│   │       ├── scripts/                   # Diagnostic scripts (test-resend.ts, test-r2-upload.ts)
-│   │       ├── subscribers/               # Event subscribers (password-reset.ts via Resend)
-│   │       ├── workflows/                 # Business logic workflows and steps
-│   │       └── ...
-│   │
-│   └── storefront/                        # Customer-Facing Next.js Storefront (@dtc/storefront)
-│       ├── next.config.js                 # Next.js config (Turbopack root, aliases, CSP, R2 remote patterns)
-│       ├── .env.local                     # Storefront environment variables
-│       ├── public/                        # Static imagery (hero-bg, collection thumbnails)
-│       ├── src/
-│       │   ├── app/                       # App Router routes:
-│       │   │   ├── page.tsx               # Curated editorial gallery homepage (ISR revalidate = 60)
-│       │   │   ├── artworks/              # Artwork catalog & [handle] detail pages (ISR revalidate = 60)
-│       │   │   ├── collections/           # Curated collection overviews & single collection pages
-│       │   │   ├── about/                 # Artist statement & studio background
-│       │   │   ├── commissions/           # Bespoke commission inquiry request workflow
-│       │   │   ├── contact/               # Studio contact form
-│       │   │   ├── shipping/              # Shipping, handling, care & return policies
-│       │   │   ├── saved/                 # Saved / Wishlist gallery
-│       │   │   ├── cart/                  # Dedicated cart page (dynamic)
-│       │   │   ├── checkout/              # Seamless guest / customer checkout flow (dynamic)
-│       │   │   ├── account/               # Customer account portal, forgot-password & reset-password
-│       │   │   ├── order/                 # Order confirmation & status (dynamic)
-│       │   │   ├── api/inquiry/           # Commission & artwork inquiry handler
-│       │   │   ├── globals.css            # Custom gallery design tokens & typography
-│       │   │   └── layout.tsx             # Root layout with Header & Footer
-│       │   ├── components/                # Modular gallery components (Header, HeaderNav, HeaderActions,
-│       │   │                              # CartDrawer, MobileMenu, PromoBanner, ArtworkGrid, BrowseFilters,
-│       │   │                              # livinIcons, SaveButton, SavedWorks, InquiryForm, Footer, RecentlyAddedSection)
-│       │   └── lib/                       # Medusa client & data services
-│       │       ├── medusa.ts              # Medusa JS SDK client instance
-│       │       ├── config.ts              # Site metadata & navigation configuration
-│       │       ├── format.ts              # Currency & dimension formatting helpers
-│       │       ├── saved.ts               # LocalStorage wishlist state helper
-│       │       └── data/                  # In-memory TTL cached fetchers (catalog, cart, customer, password-reset)
-│       └── package.json
-│
-├── docs/                                  # Deep-dive architecture and performance specifications
-│   ├── AUTHENTICATION_AND_AUTHORIZATION.md# Complete auth lifecycle, Option C magic link spec & security guarantees
-│   └── PERFORMANCE_AND_CACHING.md         # Storefront latency analysis, root cause, in-memory cache & ISR benchmarks
-├── package.json                           # Turborepo root package.json
-├── package-lock.json                      # Authoritative lockfile (npm@11.1.0)
-└── turbo.json                             # Turborepo pipeline tasks
+ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
+ ├── apps/
+ │   ├── backend/                           # Medusa v2 Commerce Engine (@dtc/backend)
+ │   │   ├── medusa-config.ts               # Core Medusa config: DB URL, CORS, secrets, SSL, R2 S3 provider
+ │   │   ├── .env                           # Backend environment variables
+ │   │   ├── static/                        # Media assets & local upload storage
+ │   │   └── src/
+ │   │       ├── admin/                     # Custom admin dashboard routes & widgets (gallery, journal)
+ │   │       ├── api/                       # File-based API endpoints (store/* and admin/*)
+ │   │       ├── jobs/                      # Scheduled background jobs
+ │   │       ├── modules/                   # Custom Medusa modules (gallery, journal)
+ │   │       ├── scripts/                   # Diagnostic scripts (test-resend.ts, test-r2-upload.ts)
+ │   │       ├── subscribers/               # Event subscribers (password-reset.ts via Resend)
+ │   │       ├── workflows/                 # Business logic workflows and steps
+ │   │       └── ...
+ │   │
+ │   └── storefront/                        # Customer-Facing Next.js Storefront (@dtc/storefront)
+ │       ├── next.config.js                 # Next.js config (Turbopack root, aliases, CSP, R2 remote patterns)
+ │       ├── .env.local                     # Storefront environment variables
+ │       ├── public/                        # Static imagery (hero-bg, collection thumbnails, about assets)
+ │       ├── src/
+ │       │   ├── app/                       # App Router routes:
+ │       │   │   ├── page.tsx               # Curated editorial gallery homepage (ISR revalidate = 60)
+ │       │   │   ├── artworks/              # Artwork catalog & [handle] detail pages (ISR revalidate = 60)
+ │       │   │   ├── collections/           # Curated collection overviews & single collection pages
+ │       │   │   ├── gallery/               # Editorial visual exhibition & artwork grid
+ │       │   │   ├── journal/               # Editorial studio articles & [slug] pages
+ │       │   │   ├── about/                 # Artist statement & studio background
+ │       │   │   ├── commissions/           # Bespoke commission inquiry request workflow
+ │       │   │   ├── contact/               # Studio contact form
+ │       │   │   ├── shipping/              # Shipping, handling, care & return policies
+ │       │   │   ├── saved/                 # Saved / Wishlist gallery
+ │       │   │   ├── cart/                  # Dedicated cart page (dynamic)
+ │       │   │   ├── checkout/              # Seamless guest / customer checkout flow (dynamic)
+ │       │   │   ├── account/               # Customer account portal, profile & order history
+ │       │   │   ├── login/                 # Dedicated customer sign-in route
+ │       │   │   ├── register/              # Customer account creation route
+ │       │   │   ├── forgot-password/       # Password reset request route
+ │       │   │   ├── reset-password/        # Password reset confirmation route
+ │       │   │   ├── verify-email/          # Email verification status notice
+ │       │   │   ├── auth/callback/         # Auth verification code exchange route
+ │       │   │   ├── order/                 # Order confirmation & status (dynamic)
+ │       │   │   ├── api/inquiry/           # Commission & artwork inquiry handler
+ │       │   │   ├── api/revalidate/        # On-demand ISR revalidation handler
+ │       │   │   ├── globals.css            # Custom gallery design tokens & typography
+ │       │   │   └── layout.tsx             # Root layout with Header & Footer
+ │       │   ├── components/                # Modular gallery components (Header, HeaderNav, HeaderActions,
+ │       │   │   │                          # CartDrawer, MobileMenu, PromoBanner, ArtworkGrid, BrowseFilters,
+ │       │   │   │                          # livinIcons, SaveButton, SavedWorks, InquiryForm, Footer, RecentlyAddedSection)
+ │       │   │   └── auth/                  # Authentication UI forms (LoginForm, RegisterForm, ForgotPasswordForm,
+ │       │   │                              # ResetPasswordForm, VerifyEmailNotice, AccountDashboard)
+ │       │   └── lib/                       # Medusa client, Supabase auth & security services
+ │       │       ├── medusa.ts              # Medusa JS SDK client instance
+ │       │       ├── config.ts              # Site metadata & navigation configuration
+ │       │       ├── format.ts              # Currency & dimension formatting helpers
+ │       │       ├── saved.ts               # LocalStorage wishlist state helper
+ │       │       ├── security/              # Rate limiting & brute-force protection
+ │       │       ├── supabase/              # Supabase SSR client, server & middleware helpers
+ │       │       ├── validation/            # Zod validation schemas for auth & forms
+ │       │       └── data/                  # In-memory TTL cached fetchers (catalog, cart, customer, password-reset)
+ │       └── package.json
+ │
+ ├── docs/                                  # Deep-dive architecture and performance specifications
+ │   ├── AUTHENTICATION_AND_AUTHORIZATION.md# Complete auth lifecycle, Option C magic link spec & security guarantees
+ │   ├── PERFORMANCE_AND_CACHING.md         # Storefront latency analysis, root cause, in-memory cache & ISR benchmarks
+ │   └── medusa-gallery-feature.md          # Medusa v2 gallery module & exhibition grid architecture
+ ├── supabase/                              # Supabase configurations & database migrations
+ │   └── migrations/                        # SQL migrations (01_profiles_and_rls.sql)
+ ├── package.json                           # Turborepo root package.json
+ ├── package-lock.json                      # Authoritative lockfile (npm@11.1.0)
+ └── turbo.json                             # Turborepo pipeline tasks
 ```
 
 ---
@@ -234,6 +252,36 @@ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
     - **Medusa Admin Dashboard UI:** Built full CRUD interface under `apps/backend/src/admin/routes/journal/page.tsx` featuring a posts table with status badges and an editorial `FocusModal` for authoring markdown articles, previewing metadata, and managing publication state.
     - **Editorial Storefront Experience:** Built `/journal` index page (`apps/storefront/src/app/journal/page.tsx`) with featured story banner and responsive 3-column article cards, plus dedicated `/journal/[slug]` detail page with `react-markdown` styling, SEO metadata generation, and studio attribution. Integrated Journal navigation across `HeaderNav`, `MobileMenu`, and `Footer`.
 
+16. **Medusa v2 Gallery Feature Module & Editorial Exhibition Experience (Branch `feature/r2-file-storage`):**
+    - **Custom Medusa v2 Gallery Module:** Created custom module at `apps/backend/src/modules/gallery` with `GalleryItem` data model (title, description, image_url, dimensions, medium, year, is_featured, display_order, metadata) using Medusa's DML and `MedusaService`. Registered module in `medusa-config.ts`.
+    - **Database Migration:** Generated and executed migration `Migration20261025060751` creating PostgreSQL table `gallery_item` with indexes on `is_featured`, `display_order`, and soft delete support.
+    - **Transactional Workflows:** Built `createGalleryItemWorkflow`, `updateGalleryItemWorkflow`, `deleteGalleryItemWorkflow`, and `updateGalleryLayoutWorkflow` ensuring transactional consistency and automatic rollback.
+    - **Admin & Store API Endpoints:** Developed authenticated admin routes (`GET /admin/gallery`, `POST /admin/gallery`, `POST /admin/gallery/layout`, `GET /admin/gallery/:id`, `POST /admin/gallery/:id`, `DELETE /admin/gallery/:id`) and public store route (`GET /store/gallery`).
+    - **Admin Dashboard UI:** Created interactive gallery management screen (`apps/backend/src/admin/routes/gallery/page.tsx`) with visual masonry preview, drag-and-drop order updates, and full CRUD modal.
+    - **Storefront Editorial Exhibition Page:** Built `/gallery` (`apps/storefront/src/app/gallery/page.tsx` & `GalleryGrid.tsx`) with responsive CSS columns masonry grid, category and medium filter tabs, full-screen image lightbox modal, keyboard navigation (`Esc`, `ArrowLeft`, `ArrowRight`), and on-demand ISR revalidation handler (`/api/revalidate`). Integrated Gallery link across `HeaderNav`, `MobileMenu`, and `Footer`.
+    - **Specification & Documentation:** Documented complete architectural blueprint in `docs/medusa-gallery-feature.md`.
+
+17. **Storefront Authentication System & Dual Identity Integration (Medusa v2 + Supabase Auth):**
+    - **Architecture & Dual Provider Strategy:** Engineered an editorial gallery authentication suite integrating Medusa v2 customer sessions alongside optional Supabase Auth SSR for OAuth and email verification (`@supabase/ssr`, `@supabase/supabase-js`, `zod`).
+    - **Dedicated Authentication Routes:** Implemented clean App Router routes for customer identity management:
+      - `/login`: Clean editorial sign-in form with `?next=` redirection and session cookie issuance (`_medusa_jwt`).
+      - `/register`: Account registration with first name, last name, email, password, and marketing opt-in flag.
+      - `/forgot-password`: Password reset request form with generic anti-enumeration success messaging.
+      - `/reset-password`: Token-based password reset confirmation form with real-time complexity validation.
+      - `/verify-email`: Branded notice screen handling pending verification, token success, and expired link recovery.
+      - `/auth/callback`: Server-side code exchange route handler for email confirmation and magic links.
+    - **Modular Form Components:** Built bespoke fine-art styled UI components under `apps/storefront/src/components/auth/`: `LoginForm`, `RegisterForm`, `ForgotPasswordForm`, `ResetPasswordForm`, `VerifyEmailNotice`, and `AccountDashboard`.
+    - **Security & Rate Limiting:** Built in-memory sliding window rate limiter in `apps/storefront/src/lib/security/rate-limit.ts` guarding authentication endpoints against brute-force attacks and credential stuffing.
+    - **Schema Validation & Password Rules:** Implemented strict Zod schemas in `apps/storefront/src/lib/validation/auth.ts` enforcing 8+ character passwords with uppercase, lowercase, and numeric requirements.
+    - **Supabase Database Schema & RLS:** Authored `supabase/migrations/01_profiles_and_rls.sql` establishing `public.profiles` table with row-level security (RLS) policies and automatic trigger on `auth.users` insertion.
+    - **Guest Cart Preservation & Checkout Sync:** Wired customer authentication directly into cart actions (`transferCart` in `customer.ts`), preserving guest cart items when customers sign in and auto-prefilling customer details in checkout.
+    - **Navigation & Header State Sync:** Updated `Header.tsx`, `HeaderActions.tsx`, and `MobileMenu.tsx` to dynamically query customer sessions, displaying customer initials/name and providing one-click sign out.
+    - **Testing & Documentation:** Created test suite `apps/storefront/src/__tests__/auth.test.js` validating authentication logic and input validation; updated `README.md` and `.env.example` with comprehensive setup checklists and manual test instructions.
+
+18. **Medusa v2 Payment Session Initiation Compatibility Fix:**
+    - **Root Cause:** Encountered TypeScript compiler error `TS2353: Object literal may only specify known properties, and 'context' does not exist in type 'StoreInitializePaymentSession'` in `apps/storefront/src/lib/data/cart.ts:L329`. In Medusa v2 SDK, the request payload interface expects `provider_id: string` and optional `data?: Record<string, unknown>`, whereas older callers and v1 patterns passed `context`.
+    - **Resolution:** Updated `initiatePaymentSession()` in `apps/storefront/src/lib/data/cart.ts` to map `sessionData = data.data ?? data.context` and pass `{ provider_id: data.provider_id, ...(sessionData ? { data: sessionData } : {}) }`. This conforms strictly to the `StoreInitializePaymentSession` type while retaining seamless backward-compatibility for callers passing either key.
+
 ---
 
 ## 6. Current Roadmap & Next Steps
@@ -250,8 +298,13 @@ c:\Users\chall\OneDrive\Desktop\LITA\LITA\
    - [ ] Build custom admin widgets under `apps/backend/src/admin/widgets/` for easy metadata editing in the Medusa Admin Dashboard.
    - [ ] Expose metadata in `/store/products` and wire dynamically to artwork detail pages (`artworks/[handle]/page.tsx`) and filter bar (`BrowseFilters.tsx`).
 
-3. **Low-Friction Authentication & Email Verification (Option C Magic Link):**
-   - [ ] Implement short-lived signed magic link request and verification actions (`requestPasswordlessLink`, `verifyPasswordlessToken`) with Resend dispatch.
+3. **Storefront Authentication System & Low-Friction Verification:**
+   - [x] Dedicated Next.js Storefront authentication routes (`/login`, `/register`, `/forgot-password`, `/reset-password`, `/verify-email`, `/auth/callback`).
+   - [x] Dual identity provider integration: Medusa v2 customer accounts with session cookies (`_medusa_jwt`) + Supabase Auth SSR support (`@supabase/ssr`).
+   - [x] In-memory sliding window rate limiting (`rate-limit.ts`) and Zod schema validation (`validation/auth.ts`).
+   - [x] Atomic guest cart merge & customer transfer on login (`transferCart` in `customer.ts`).
+   - [x] Database migration for Supabase user profiles table and RLS policies (`01_profiles_and_rls.sql`).
+   - [ ] Implement short-lived signed magic link request and verification actions (`requestPasswordlessLink`, `verifyPasswordlessToken`) with Resend dispatch at `/checkout`.
    - [ ] Wire seamless magic link verification directly into `/checkout` contact step with atomic cart transfer (`transferCart`), eliminating registration friction while preserving guest carts.
 
 4. **Automated Notification & Email Workflows:**
