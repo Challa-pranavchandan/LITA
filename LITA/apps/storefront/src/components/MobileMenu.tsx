@@ -149,7 +149,7 @@ export function MobileMenu({
                       <li><Link href="/artworks?max=350" className="text-[#333333] hover:text-black">Art Under $350</Link></li>
                       <li><Link href="/artworks?max=800" className="text-[#333333] hover:text-black">Art Under $800</Link></li>
                       <li><Link href="/artworks" className="text-[#333333] hover:text-black">Ready for Pick-up</Link></li>
-                      <li><Link href="/commissions" className="text-[#333333] hover:text-black">Custom Artwork</Link></li>
+                      <li><Link href="/commissions" className="text-red-600 hover:text-red-700 font-medium">Commission Artwork</Link></li>
                       <li className="pt-1"><Link href="/artworks" className="text-black underline">All Artwork</Link></li>
                     </ul>
                   </div>

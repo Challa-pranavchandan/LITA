@@ -21,6 +21,7 @@ module.exports = {
         hanken: ['"Hanken Grotesk"', '"Familjen Grotesk Variable"', "system-ui", "sans-serif"],
         serif: ['"Literata Variable"', "Georgia", "serif"],
         cormorant: ['"Cormorant Garamond"', "Georgia", "serif"],
+        display: ["var(--font-display)", '"Cormorant Garamond"', "Georgia", "serif"],
       },
       letterSpacing: {
         tightish: "-0.015em",

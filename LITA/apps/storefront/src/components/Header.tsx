@@ -7,7 +7,7 @@ import { MobileMenu } from "@/components/MobileMenu";
 import { PromoBanner } from "@/components/PromoBanner";
 import { HeaderNav } from "@/components/HeaderNav";
 import { HeaderActions } from "@/components/HeaderActions";
-import { UpriseArtLogo } from "@/components/livinIcons";
+import { NavLogo } from "@/components/layout/Navbar";
 
 export async function Header() {
   const cookieStore = await cookies();
@@ -41,13 +41,7 @@ export async function Header() {
                 customer={customer}
               />
             </div>
-            <Link
-              href="/"
-              aria-label="LIVININ THE ART Home"
-              className="inline-flex items-center text-[#111111] transition-opacity hover:opacity-75 focus-visible:outline-none"
-            >
-              <UpriseArtLogo className="text-[11px] md:text-[12px] tracking-[0.25em] font-light text-[#111111]" />
-            </Link>
+            <NavLogo />
           </div>
 
           {/* Center: Main Navigation (Desktop) */}

@@ -190,16 +190,16 @@ export function HeaderNav({
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >
-                      Art Under $350
+                      Art Under 450rs
                     </Link>
                   </li>
                   <li>
                     <Link
-                      href="/artworks?max=800"
+                      href="/artworks?max=1000"
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >
-                      Art Under $800
+                      Art Under 1000rs
                     </Link>
                   </li>
                   <li>
@@ -215,9 +215,9 @@ export function HeaderNav({
                     <Link
                       href="/commissions"
                       onClick={() => setActiveMenu(null)}
-                      className="text-[#222222] hover:text-black transition-colors block"
+                      className="text-red-600 hover:text-red-700 transition-colors font-medium block"
                     >
-                      Custom Artwork
+                      Commission Artwork
                     </Link>
                   </li>
                   <li className="pt-1">
@@ -364,7 +364,7 @@ export function HeaderNav({
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
-                  Advisory
+                  SERVICES
                 </p>
                 <ul className="space-y-2.5 text-[14px]">
 
@@ -381,7 +381,7 @@ export function HeaderNav({
                     <Link
                       href="/commissions"
                       onClick={() => setActiveMenu(null)}
-                      className="text-[#222222] hover:text-black transition-colors block"
+                      className="text-red-600 hover:text-red-700 transition-colors font-medium block"
                     >
                       Bespoke Commissions
                     </Link>

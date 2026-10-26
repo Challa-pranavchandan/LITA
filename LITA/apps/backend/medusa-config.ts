@@ -88,6 +88,9 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/commission",
     },
+    {
+      resolve: "./src/modules/feedback",
+    },
     ...(isR2Configured
       ? [
           {

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import FeedbackWidget from "@/components/FeedbackWidget";
 
 export function Footer() {
   const [email, setEmail] = useState("");
@@ -298,6 +299,8 @@ export function Footer() {
               <Link href="/terms" className="hover:text-black transition-colors">
                 Terms of Use
               </Link>
+              <span className="text-[#666666]">-</span>
+              <FeedbackWidget />
             </div>
           </div>
 

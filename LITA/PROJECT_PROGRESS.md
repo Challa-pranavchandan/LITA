@@ -322,6 +322,28 @@
       - Upgraded `/commissions` with editorial 3-step process cards and `CommissionRequestForm.tsx` supporting drag-and-drop R2 uploads with live progress.
       - Extended `/account` (`AccountDashboard.tsx`) with a dedicated **Commissions** tab, status timeline tracker, quote acceptance card with INR formatting, and two-way studio chat.
 
+22. **Medusa v2 Feedback & Bug Report System:**
+    - **Custom Medusa v2 Feedback Module:** Created `apps/backend/src/modules/feedback/` with `Feedback` model (`title`, `description`, `type: ["bug", "feedback", "feature_request", "other"]`, `status: ["open", "in_progress", "resolved", "closed"]`, `priority: ["low", "medium", "high", "critical"]`, `email`, `page_url`, `user_agent`, `metadata`) using `@medusajs/framework/utils` DML. Registered module in `apps/backend/medusa-config.ts`.
+    - **Database Migration:** Generated and applied migration `Migration20261026040855.ts` creating the `feedback` table on Supabase PostgreSQL.
+    - **Store & Admin API Routes:**
+      - `POST /store/feedback`: Public customer feedback submission endpoint with publishable key and Zod validation (`PostStoreFeedbackSchema`).
+      - `GET /admin/feedback`: Admin feedback listing route supporting status/type filtering, search query, pagination, and sorting.
+      - `GET /admin/feedback/:id`: Single feedback report lookup with complete metadata.
+      - `POST /admin/feedback/:id`: Admin feedback status and priority updates with audit trail.
+    - **Medusa Admin Dashboard UI:** Built dedicated administrative screen at `apps/backend/src/admin/routes/feedback/page.tsx` with sidebar navigation (`ChatBubbleLeftRight` icon), real-time status and priority badges, search filter, feedback detail drawer, and status mutation actions.
+    - **Storefront Client Floating Widget:** Added floating feedback widget (`FeedbackWidget.tsx`) mounted in `Footer.tsx` with modal dialog, category selectors, automatic `page_url` and `user_agent` capture, validation, loading spinner, and success acknowledgment.
+
+23. **LITA First-Load Intro Animation & Shared-Element Navbar Transition ("Livin In The Art"):**
+    - **Shared-Element Motion Architecture:** Built creative first-load preloader and seamless landing animation into the navbar logo using GSAP Core + Flip plugin.
+    - **Brand Identity & Acronym Staging:** Starts with full-screen gallery canvas (`#F7F3EC` warm cream, `#111111` deep ink, `100dvh`) centered on the brand acronym **"Lita"**. At 600ms, the full name **"Livin In The Art"** reveals with a masked, staggered slide-up animation (`power3.out`).
+    - **True Shared-Element Landing:** The revealed full name **"Livin In The Art"** scales down and glides across the viewport to merge into the top-left navbar logo slot, calculated at runtime via `getBoundingClientRect()` with zero visual jump. Real navbar logo swaps visibility in the exact same frame.
+    - **Instant Pre-Paint Anti-Flash Engine:** Added an inline synchronous `<script>` and `<style>` in `apps/storefront/src/app/layout.tsx` `<head>`:
+      - First visit / `?intro=1`: Server-rendered overlay is immediately present in the initial HTML document; body scroll is locked (`overflow: hidden !important`) before first paint so the page never flashes.
+      - Repeat visits in same session: Detects `sessionStorage.getItem("lita-intro-seen") === "1"` and immediately applies `.intro-done` to hide the overlay (`display: none !important`) before paint.
+    - **Display Typography:** Integrated `Cormorant_Garamond` via `next/font/google` with variable `--font-display` and mapped `fontFamily.display` in `tailwind.config.ts` and `tailwind.config.js`.
+    - **Files Created:** `components/intro/IntroProvider.tsx`, `components/intro/IntroLoader.tsx`, `components/layout/Navbar.tsx`, `hooks/useIntroReady.ts`.
+    - **Failsafe & Edge Cases:** 2.5s failsafe timer, fallback DOM query (`document.getElementById("nav-logo")`), reduced motion respect (`prefers-reduced-motion: reduce`), and `?intro=1` / `?replay=1` URL query parameter for manual replaying.
+
 ---
 
 ## 6. Current Roadmap & Next Steps

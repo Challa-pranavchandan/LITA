@@ -1,5 +1,11 @@
 import { authenticate, configureStoreSearch, defineMiddlewares, validateAndTransformBody } from "@medusajs/framework/http"
 import { z } from "@medusajs/framework/zod"
+import multer from "multer"
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+})
 
 const PostSchema = z.object({
   title: z.string().min(1),
@@ -58,6 +64,11 @@ export const UpdateTradeApplicationSchema = z.object({
 
 export default defineMiddlewares({
   routes: [
+    {
+      method: ["POST"],
+      matcher: "/store/feedback",
+      middlewares: [upload.single("image")],
+    },
     {
       method: ["POST"],
       matcher: "/store/search",
