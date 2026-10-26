@@ -1,6 +1,6 @@
 "use client"
 import { RadioGroup } from "@headlessui/react"
-import { isStripeLike, paymentInfoMap } from "@lib/constants"
+import { isRazorpay, isStripeLike, paymentInfoMap } from "@lib/constants"
 import { initiatePaymentSession } from "@lib/data/cart"
 import { CheckCircleSolid, CreditCard } from "@medusajs/icons"
 import ErrorMessage from "@modules/checkout/components/error-message"
@@ -46,7 +46,7 @@ const Payment = ({
   const setPaymentMethod = async (method: string) => {
     setError(null)
     setSelectedPaymentMethod(method)
-    if (isStripeLike(method)) {
+    if (isStripeLike(method) || isRazorpay(method)) {
       await initiatePaymentSession(cart, {
         provider_id: method,
       })
@@ -233,7 +233,11 @@ const Payment = ({
                       <CreditCard />
                     )}
                   </Container>
-                  <Text>Another step will appear</Text>
+                  <Text>
+                    {isRazorpay(selectedPaymentMethod)
+                      ? "Pay with UPI, card, or netbanking via Razorpay Checkout"
+                      : "Another step will appear"}
+                  </Text>
                 </div>
               </div>
             </div>

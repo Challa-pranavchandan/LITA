@@ -91,6 +91,32 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/feedback",
     },
+    {
+      resolve: "@medusajs/medusa/payment",
+      options: {
+        providers: [
+          {
+            resolve: "./src/modules/razorpay",
+            id: "razorpay",
+            options: {
+              key_id:
+                process.env.RAZORPAY_KEY_ID ||
+                (process.env.NODE_ENV !== "production"
+                  ? "rzp_test_placeholder"
+                  : ""),
+              key_secret:
+                process.env.RAZORPAY_KEY_SECRET ||
+                (process.env.NODE_ENV !== "production" ? "dummy_secret" : ""),
+              webhook_secret:
+                process.env.RAZORPAY_WEBHOOK_SECRET ||
+                (process.env.NODE_ENV !== "production"
+                  ? "dummy_webhook_secret"
+                  : ""),
+            },
+          },
+        ],
+      },
+    },
     ...(isR2Configured
       ? [
           {

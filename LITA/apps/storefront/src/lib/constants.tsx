@@ -33,6 +33,10 @@ export const paymentInfoMap: Record<
     title: "Manual Payment",
     icon: <CreditCard />,
   },
+  pp_razorpay_razorpay: {
+    title: "UPI / Cards / Netbanking (Razorpay)",
+    icon: <CreditCard />,
+  },
   // Add more payment providers here
 }
 
@@ -40,6 +44,13 @@ export const paymentInfoMap: Record<
 export const isStripeLike = (providerId?: string) => {
   return (
     providerId?.startsWith("pp_stripe_") || providerId?.startsWith("pp_medusa-")
+  )
+}
+
+export const isRazorpay = (providerId?: string) => {
+  return (
+    providerId === "pp_razorpay_razorpay" ||
+    providerId?.startsWith("pp_razorpay")
   )
 }
 
