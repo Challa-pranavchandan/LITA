@@ -348,11 +348,23 @@
 
 ## 6. Current Roadmap & Next Steps
 
-1. **Payment Gateway Integration (Stripe):**
-   - [ ] Install and configure `@medusajs/payment-stripe` payment module in `apps/backend/medusa-config.ts`.
-   - [ ] Connect Stripe Elements into `apps/storefront/src/components/CheckoutFlow.tsx` with `NEXT_PUBLIC_STRIPE_KEY`.
-   - [ ] Configure Medusa Stripe webhook handler for asynchronous payment events (`payment_intent.succeeded`, `payment_intent.payment_failed`).
-   - [ ] Set `STRIPE_API_KEY` and `STRIPE_WEBHOOK_SECRET` in backend `.env`.
+1. **Payment Gateway Integration (Razorpay - India / INR Only):**
+   - [x] Custom Razorpay payment provider module (`apps/backend/src/modules/razorpay/service.ts`, provider ID `pp_razorpay_razorpay`) with INR currency enforcement and paise math helpers (`toPaise`, `fromPaise`).
+   - [x] Hardened `authorizePayment`: timing-safe HMAC signature verification (`razorpay_order_id|razorpay_payment_id`), server-authoritative Razorpay API verification (`client_.payments.fetch`) for amount, INR currency, order ID match, and authorized/captured status.
+   - [x] Anti-replay attack prevention: queries Medusa payment module to reject reused `razorpay_payment_id` tokens across different sessions.
+   - [x] Strict session data protection in `updatePayment`: strips client-supplied amounts/order IDs, preserving server-calculated paise and Razorpay order references.
+   - [x] Error handling & observability: `capturePayment` throws `MedusaError(PAYMENT_AUTHORIZATION_ERROR)` on failure; `retrievePayment` and `getPaymentStatus` log errors with payment IDs (never secrets).
+   - [x] Fail-closed secrets: `apps/backend/medusa-config.ts` requires real credentials, gating mock fallbacks behind explicit `ALLOW_DEV_PAYMENT_PLACEHOLDERS=true`.
+   - [x] Authoritative webhook handler (`/hooks/payment/pp_razorpay_razorpay`): validates raw-body HMAC, logs structured reason for every `NOT_SUPPORTED` path without leaking secrets, maps `payment.captured` and `order.paid` to `PaymentActions.SUCCESSFUL`, and documents unhandled refund events.
+   - [x] Pay-then-close-tab cart recovery: `apps/backend/src/subscribers/razorpay-payment-recovery.ts` and `apps/backend/src/workflows/reconcile-razorpay-order.ts` automatically reconcile and complete abandoned carts upon receiving webhook confirmations.
+   - [x] Storefront payment UI & flow: Razorpay as exclusive payment provider for India region; shared `RAZORPAY_PROVIDER_ID` constant; failure recovery message with duplicate-order prevention.
+   - [x] Unit test suite: 40 tests covering signature verification, replay protection, error handling, data protection, and webhook routing (`razorpay-provider.unit.spec.ts`).
+   - [ ] **Remaining Go-Live Items:**
+     - [ ] Complete Razorpay business KYC and activate Live mode in Razorpay Dashboard.
+     - [ ] Enable **Auto-Capture** in Razorpay Dashboard (**Settings** -> **Payment Capture**).
+     - [ ] Configure live mode API keys (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `NEXT_PUBLIC_RAZORPAY_KEY_ID`).
+     - [ ] Configure live webhook endpoint (`https://<domain>/hooks/payment/pp_razorpay_razorpay`) with `RAZORPAY_WEBHOOK_SECRET` for `payment.authorized`, `payment.captured`, `payment.failed`, `order.paid`.
+     - [ ] Small live test transaction (₹1) and refund verification via Medusa Admin.
 
 2. **Custom Backend Artwork Attributes & Admin Extensions:**
    - [ ] Extend Medusa product entity / create custom module for art attributes: `artist_name`, `medium`, `dimensions`, `certificate_of_authenticity`, `edition`, `year_created`.
@@ -413,14 +425,14 @@ Please show me how to:
 4. Display them on the artwork detail page in apps/storefront/src/app/artworks/[handle]/page.tsx and in BrowseFilters.tsx.
 ```
 
-### Prompt B: Setting Up Stripe Payments in Medusa v2 & Next.js Storefront
+### Prompt B: Verifying Razorpay Live Mode & Webhook Reconciliation
 ```text
-Refer to PROJECT_PROGRESS.md for my Medusa v2 monorepo setup.
+Refer to PROJECT_PROGRESS.md and docs/razorpay.md for my Medusa v2 monorepo setup.
 
-I need to configure Stripe payment processing for both backend and storefront:
-1. What Medusa v2 payment module should I add in apps/backend/medusa-config.ts?
-2. What environment variables are required in apps/backend/.env and apps/storefront/.env.local?
-3. How do I ensure the checkout step in apps/storefront/src/components/CheckoutFlow.tsx loads the Stripe Elements form properly and handles payment confirmation?
+I need to prepare Razorpay for production go-live:
+1. Verify live mode credentials in apps/backend/.env and apps/storefront/.env.local.
+2. Ensure auto-capture is enabled in the Razorpay Dashboard.
+3. Configure the live webhook URL (https://<domain>/hooks/payment/pp_razorpay_razorpay) and test the pay-then-close-tab cart recovery workflow.
 ```
 
 ### Prompt C: Implementing Option C Passwordless / Magic Link at Checkout
