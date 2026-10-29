@@ -11,15 +11,20 @@ import {
   startPayment,
   type AddressInput,
 } from "@/lib/data/cart";
+import { isRazorpay } from "@/lib/constants";
+import RazorpayPaymentButton from "@/modules/checkout/components/payment-button/razorpay-payment-button";
 
 type Step = "address" | "shipping" | "payment";
 
-const SUPPORTED_PROVIDER = "pp_system_default";
+const isSupportedProvider = (id: string) =>
+  id === "pp_system_default" || isRazorpay(id);
 
 function providerLabel(id: string) {
-  if (id === SUPPORTED_PROVIDER) return "Pay by manual payment";
+  if (id === "pp_system_default") return "Manual Payment (Pay Offline / Test)";
+  if (isRazorpay(id)) return "UPI / Cards / Netbanking (Razorpay)";
   return id.replace(/^pp_/, "").replace(/_/g, " ");
 }
+
 
 function initialStep(cart: HttpTypes.StoreCart): Step {
   const a = cart.shipping_address;
@@ -68,7 +73,7 @@ export function CheckoutFlow({
 
   const currency = cart.currency_code;
   const selectedShipping = cart.shipping_methods?.[0]?.shipping_option_id;
-  const usable = providers.filter((p) => p.id === SUPPORTED_PROVIDER);
+  const usable = providers.filter((p) => isSupportedProvider(p.id));
   const [providerId, setProviderId] = useState(usable[0]?.id ?? "");
 
   function submitAddress(e: React.FormEvent) {
@@ -206,9 +211,15 @@ export function CheckoutFlow({
             </fieldset>
           )}
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-          <button type="button" onClick={submitOrder} disabled={pending || !providerId} className="btn-solid w-full sm:w-auto">
-            {pending ? "Placing order…" : `Place order · ${formatMoney(cart.total, currency)}`}
-          </button>
+          {isRazorpay(providerId) ? (
+            <div className="pt-2">
+              <RazorpayPaymentButton cart={cart} notReady={pending || !providerId} />
+            </div>
+          ) : (
+            <button type="button" onClick={submitOrder} disabled={pending || !providerId} className="btn-solid w-full sm:w-auto">
+              {pending ? "Placing order…" : `Place order · ${formatMoney(cart.total, currency)}`}
+            </button>
+          )}
           <p className="text-sm text-graphite">By placing the order you agree to the <a href="/shipping" className="link">shipping and returns policy</a>.</p>
         </div>
       )}

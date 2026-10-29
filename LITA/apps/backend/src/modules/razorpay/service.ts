@@ -107,6 +107,7 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
         amount: order.amount,
         currency: order.currency,
         status: order.status,
+        key_id: this.options_.key_id,
       },
     }
   }
@@ -220,17 +221,35 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
     const currentData = (data ?? {}) as Record<string, any>
     const newPaise = toPaise(amount)
 
+    // 1. If this is a payment verification call from the frontend (payment completed in Razorpay modal),
+    // preserve the existing razorpay_order_id and attach the verification fields so authorizePayment succeeds.
+    const hasVerification = Boolean(
+      currentData.razorpay_payment_id && currentData.razorpay_signature
+    )
+    if (hasVerification) {
+      return {
+        data: {
+          ...currentData,
+          amount: currentData.amount ?? newPaise,
+          key_id: this.options_.key_id,
+        },
+      }
+    }
+
     const existingAmount = currentData.amount
+    const isKeyMismatched = Boolean(currentData.key_id && currentData.key_id !== this.options_.key_id)
     const isAmountUnchanged =
       existingAmount !== undefined &&
       Number(existingAmount) === newPaise &&
-      Boolean(currentData.razorpay_order_id)
+      Boolean(currentData.razorpay_order_id) &&
+      !isKeyMismatched
 
     // If order exists and total amount has not changed, merge incoming data and keep existing order
     if (isAmountUnchanged) {
       return {
         data: {
           ...currentData,
+          key_id: this.options_.key_id,
         },
       }
     }
@@ -255,6 +274,7 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
         amount: order.amount,
         currency: order.currency,
         status: order.status,
+        key_id: this.options_.key_id,
       },
     }
   }

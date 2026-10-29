@@ -5,9 +5,9 @@ export const metadata: Metadata = { title: "Saved" };
 
 export default function SavedPage() {
   return (
-    <div className="page py-10">
-      <h1 className="mb-10 text-3xl">Saved</h1>
+    <div className="w-full bg-white">
       <SavedWorks />
     </div>
   );
 }
+

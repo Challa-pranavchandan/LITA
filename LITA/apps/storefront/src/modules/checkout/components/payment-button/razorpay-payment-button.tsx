@@ -102,11 +102,14 @@ export const RazorpayPaymentButton = ({
         return
       }
 
-      // 2. Ensure payment session exists with Razorpay order id
+      // 2. Ensure payment session exists with Razorpay order id and matching key
       let currentSession = paymentSession
       let orderId = currentSession?.data?.razorpay_order_id as string | undefined
+      let sessionKey = currentSession?.data?.key_id as string | undefined
 
-      if (!orderId) {
+      const configuredKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID
+
+      if (!orderId || !sessionKey || (configuredKey && sessionKey !== configuredKey)) {
         const updatedCollection = await initiatePaymentSession(cart, {
           provider_id: "pp_razorpay_razorpay",
         })
@@ -114,6 +117,7 @@ export const RazorpayPaymentButton = ({
           isRazorpay(s.provider_id)
         )
         orderId = currentSession?.data?.razorpay_order_id as string | undefined
+        sessionKey = currentSession?.data?.key_id as string | undefined
       }
 
       if (!orderId) {
@@ -122,9 +126,7 @@ export const RazorpayPaymentButton = ({
         return
       }
 
-      const key =
-        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-        (currentSession?.data?.key_id as string | undefined)
+      const key = sessionKey || configuredKey
 
       if (!key) {
         setErrorMessage("Razorpay key ID is missing. Set NEXT_PUBLIC_RAZORPAY_KEY_ID.")
@@ -171,16 +173,23 @@ export const RazorpayPaymentButton = ({
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_signature: response.razorpay_signature,
+                amount,
               },
             })
 
             // B. Complete the cart to create the Medusa order
-            await placeOrder().catch((err) => {
-              setErrorMessage(err.message || "Failed to complete order.")
+            const res = await placeOrder()
+            if (res && !res.ok) {
+              setErrorMessage(res.error || "Failed to complete order.")
               setSubmitting(false)
-            })
+            }
           } catch (err: any) {
-            setErrorMessage(err.message || "Payment verification failed.")
+            // In Next.js, redirect() throws an error with NEXT_REDIRECT digest.
+            // Do not catch it as a payment failure.
+            if (err?.digest?.startsWith?.("NEXT_REDIRECT") || err?.message === "NEXT_REDIRECT") {
+              throw err
+            }
+            setErrorMessage(err?.message || "Payment verification failed.")
             setSubmitting(false)
           }
         },

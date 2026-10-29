@@ -159,7 +159,7 @@ export function CartDrawer({
                     Go to checkout
                   </Link>
                   <Link href="/cart" onClick={close} className="link mt-3 block text-center text-sm">
-                    View full bag
+                    View Cart
                   </Link>
                 </div>
               </>

@@ -7,8 +7,8 @@ import { AccountDashboard } from "@/components/auth/AccountDashboard";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "My Account",
-  description: "View your acquisitions, order status, and profile details.",
+  title: "Your Account",
+  description: "View your account details, addresses, orders, and followed artists.",
 };
 
 export default async function AccountPage() {

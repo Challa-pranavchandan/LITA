@@ -4,29 +4,46 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { HttpTypes } from "@medusajs/types";
-import { logout, changePassword, updateProfile } from "@/lib/data/customer";
+import {
+  logout,
+  changePassword,
+  updateProfile,
+  addCustomerAddress,
+  deleteCustomerAddress,
+  updateCustomerAddress,
+} from "@/lib/data/customer";
 import type { TradeApplication } from "@/lib/data/trade";
 import type { Commission } from "@/lib/data/commission";
 import { TradeApplicationModal } from "@/components/TradeApplicationModal";
-import { CommissionsAccountTab } from "@/components/auth/CommissionsAccountTab";
+import { formatMoney } from "@/lib/format";
+import {
+  useFollowedArtists,
+  toggleFollowArtist,
+} from "@/lib/followed-artists";
+
+interface AccountDashboardProps {
+  customer: HttpTypes.StoreCustomer;
+  orders: HttpTypes.StoreOrder[];
+  tradeApplication?: TradeApplication | null;
+  commissions?: Commission[];
+}
 
 export function AccountDashboard({
   customer,
   orders,
   tradeApplication,
   commissions = [],
-}: {
-  customer: HttpTypes.StoreCustomer;
-  orders: HttpTypes.StoreOrder[];
-  tradeApplication?: TradeApplication | null;
-  commissions?: Commission[];
-}) {
+}: AccountDashboardProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"orders" | "commissions" | "trade" | "profile" | "password">("orders");
-  const [tradeApp, setTradeApp] = useState<TradeApplication | null>(tradeApplication || null);
+  const followedArtists = useFollowedArtists();
+
+  // Modals & form state
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
-  const commissionsList = commissions;
-  const quotedCount = commissionsList.filter((c) => c.status === "quoted").length;
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<HttpTypes.StoreCustomerAddress | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [commissionsModalOpen, setCommissionsModalOpen] = useState(false);
 
   // Profile update state
   const [firstName, setFirstName] = useState(customer.first_name || "");
@@ -34,25 +51,128 @@ export function AccountDashboard({
   const [marketingOptIn, setMarketingOptIn] = useState(
     Boolean(customer.metadata?.marketing_opt_in)
   );
-  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileMessage, setProfileMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [profilePending, startProfileTransition] = useTransition();
 
   // Password update state
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordMessage, setPasswordMessage] = useState<{ text: string; error: boolean } | null>(
-    null
-  );
+  const [passwordMessage, setPasswordMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [passwordPending, startPasswordTransition] = useTransition();
+
+  // Address form state
+  const [addrFirstName, setAddrFirstName] = useState("");
+  const [addrLastName, setAddrLastName] = useState("");
+  const [addrCompany, setAddrCompany] = useState("");
+  const [addrAddress1, setAddrAddress1] = useState("");
+  const [addrAddress2, setAddrAddress2] = useState("");
+  const [addrCity, setAddrCity] = useState("");
+  const [addrProvince, setAddrProvince] = useState("");
+  const [addrPostalCode, setAddrPostalCode] = useState("");
+  const [addrCountryCode, setAddrCountryCode] = useState("us");
+  const [addrPhone, setAddrPhone] = useState("");
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [addressPending, startAddressTransition] = useTransition();
 
   // Logout state
   const [logoutPending, startLogoutTransition] = useTransition();
+
+  const displayName =
+    customer.first_name || customer.last_name
+      ? `${customer.first_name || ""} ${customer.last_name || ""}`.trim()
+      : "Amber Hearn";
 
   function handleLogout() {
     startLogoutTransition(async () => {
       await logout();
       router.push("/login");
+      router.refresh();
+    });
+  }
+
+  function scrollToSection(id: string) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function openNewAddressModal() {
+    setEditingAddress(null);
+    setAddrFirstName(customer.first_name || "");
+    setAddrLastName(customer.last_name || "");
+    setAddrCompany("");
+    setAddrAddress1("");
+    setAddrAddress2("");
+    setAddrCity("");
+    setAddrProvince("");
+    setAddrPostalCode("");
+    setAddrCountryCode("us");
+    setAddrPhone(customer.phone || "");
+    setAddressError(null);
+    setAddressModalOpen(true);
+  }
+
+  function openEditAddressModal(addr: HttpTypes.StoreCustomerAddress) {
+    setEditingAddress(addr);
+    setAddrFirstName(addr.first_name || "");
+    setAddrLastName(addr.last_name || "");
+    setAddrCompany(addr.company || "");
+    setAddrAddress1(addr.address_1 || "");
+    setAddrAddress2(addr.address_2 || "");
+    setAddrCity(addr.city || "");
+    setAddrProvince(addr.province || "");
+    setAddrPostalCode(addr.postal_code || "");
+    setAddrCountryCode(addr.country_code || "us");
+    setAddrPhone(addr.phone || "");
+    setAddressError(null);
+    setAddressModalOpen(true);
+  }
+
+  function handleAddressSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setAddressError(null);
+
+    if (!addrAddress1 || !addrCity || !addrPostalCode) {
+      setAddressError("Please complete all required address fields.");
+      return;
+    }
+
+    startAddressTransition(async () => {
+      const payload = {
+        first_name: addrFirstName,
+        last_name: addrLastName,
+        company: addrCompany,
+        address_1: addrAddress1,
+        address_2: addrAddress2,
+        city: addrCity,
+        province: addrProvince,
+        postal_code: addrPostalCode,
+        country_code: addrCountryCode.toLowerCase(),
+        phone: addrPhone,
+      };
+
+      let res;
+      if (editingAddress?.id) {
+        res = await updateCustomerAddress(editingAddress.id, payload);
+      } else {
+        res = await addCustomerAddress(payload);
+      }
+
+      if (res.ok) {
+        setAddressModalOpen(false);
+        router.refresh();
+      } else {
+        setAddressError(res.error || "Failed to save address.");
+      }
+    });
+  }
+
+  function handleDeleteAddress(id: string) {
+    if (!confirm("Are you sure you want to remove this address?")) return;
+    startAddressTransition(async () => {
+      await deleteCustomerAddress(id);
       router.refresh();
     });
   }
@@ -67,9 +187,14 @@ export function AccountDashboard({
         marketing_opt_in: marketingOptIn,
       });
       if (res.ok) {
-        setProfileMessage("Your details have been saved.");
+        setProfileMessage({ text: "Account details updated successfully.", error: false });
+        setTimeout(() => {
+          setProfileModalOpen(false);
+          setProfileMessage(null);
+        }, 1200);
+        router.refresh();
       } else {
-        setProfileMessage(res.error || "Failed to update details.");
+        setProfileMessage({ text: res.error || "Failed to update profile.", error: true });
       }
     });
   }
@@ -79,11 +204,11 @@ export function AccountDashboard({
     setPasswordMessage(null);
 
     if (newPassword.length < 8) {
-      setPasswordMessage({ text: "New password must be at least 8 characters.", error: true });
+      setPasswordMessage({ text: "Password must be at least 8 characters.", error: true });
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordMessage({ text: "New passwords do not match.", error: true });
+      setPasswordMessage({ text: "Passwords do not match.", error: true });
       return;
     }
 
@@ -94,586 +219,752 @@ export function AccountDashboard({
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setTimeout(() => {
+          setPasswordModalOpen(false);
+          setPasswordMessage(null);
+        }, 1200);
       } else {
         setPasswordMessage({ text: res.error || "Could not update password.", error: true });
       }
     });
   }
 
+  const addresses = customer.addresses || [];
+
   return (
-    <div className="w-full max-w-[800px] mx-auto">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-8 mb-8 border-b border-[#EAEAEA]">
-        <div>
-          <h1 className="font-cormorant text-[40px] md:text-[56px] font-normal leading-[1.05] tracking-tight text-[#3a3a3a]">
-            {customer.first_name ? `Welcome, ${customer.first_name}` : "My Account"}
-          </h1>
-          <p className="text-[14px] text-[#6b6b6b] mt-1">{customer.email}</p>
-        </div>
-
-        <button
-          onClick={handleLogout}
-          disabled={logoutPending}
-          className="self-start sm:self-auto inline-flex items-center justify-center px-6 h-[40px] rounded-full border border-[#3a3a3a] bg-transparent text-[#3a3a3a] text-[13px] hover:bg-[#3a3a3a] hover:text-white transition-colors duration-150 disabled:opacity-50 cursor-pointer"
-        >
-          {logoutPending ? "Signing out…" : "Sign Out"}
-        </button>
+    <div className="w-full max-w-[1120px] mx-auto text-left">
+      {/* 1. Header: "Your Account" centered */}
+      <div className="text-center pb-8">
+        <h1 className="font-cormorant text-4xl sm:text-5xl md:text-[54px] font-normal text-[#1a1a1a] tracking-tight">
+          Your Account
+        </h1>
       </div>
 
-      {/* Editorial Navigation Tabs */}
-      <div className="flex flex-wrap gap-x-8 gap-y-4 border-b border-[#EAEAEA] mb-8 pb-3">
-        {(
-          [
-            { id: "orders", label: `Order History (${orders.length})` },
-            {
-              id: "commissions",
-              label: `Commissions (${commissionsList.length})`,
-              badge: quotedCount > 0 ? (
-                <span className="ml-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-amber-50 text-amber-900 border border-amber-300 animate-pulse">
-                  Quote Ready
-                </span>
-              ) : null,
-            },
-            {
-              id: "trade",
-              label: "Trade Program",
-              badge: tradeApp ? (
-                <span
-                  className={`ml-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full ${
-                    tradeApp.status === "approved"
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                      : tradeApp.status === "rejected"
-                      ? "bg-red-50 text-red-800 border border-red-200"
-                      : "bg-amber-50 text-amber-800 border border-amber-200"
-                  }`}
+      {/* Horizontal divider line stretching across */}
+      <hr className="w-full border-t border-[#e5e5e5] mb-12 md:mb-16" />
+
+      {/* 2. Main Two-Column Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] lg:grid-cols-[220px_1fr] gap-12 md:gap-16 lg:gap-24 items-start">
+        {/* Left Navigation Sidebar */}
+        <aside className="md:sticky md:top-28">
+          <nav aria-label="Account navigation">
+            <ul className="flex flex-col space-y-4 text-[15px] font-sans text-[#333333]">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection("account-details")}
+                  className="text-left hover:text-black hover:opacity-75 transition-opacity cursor-pointer"
                 >
-                  {tradeApp.status === "approved" ? "Active" : tradeApp.status}
-                </span>
-              ) : null,
-            },
-            { id: "profile", label: "Profile & Preferences" },
-            { id: "password", label: "Change Password" },
-          ] as const
-        ).map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`text-[14px] font-semibold font-hanken transition-colors cursor-pointer relative pb-3 -mb-3 flex items-center ${
-              activeTab === tab.id
-                ? "text-[#3a3a3a] border-b-2 border-[#3a3a3a]"
-                : "text-[#888888] hover:text-[#3a3a3a]"
-            }`}
-          >
-            <span>{tab.label}</span>
-            {"badge" in tab && tab.badge}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab: Orders */}
-      {activeTab === "orders" && (
-        <div>
-          {orders.length === 0 ? (
-            <div className="py-12 px-6 bg-[#f9f9f9] border border-[#eeeeee] text-left">
-              <p className="text-[16px] text-[#3a3a3a] mb-2 font-medium">No orders yet</p>
-              <p className="text-[14px] text-[#6b6b6b] mb-6">
-                When you acquire artworks from our collection, your acquisitions and tracking
-                history will be displayed here.
-              </p>
-              <Link
-                href="/artworks"
-                className="inline-flex items-center justify-center px-6 h-[44px] rounded-full border border-[#3a3a3a] bg-transparent text-[#3a3a3a] text-[14px] hover:bg-[#3a3a3a] hover:text-white transition-colors duration-150"
-              >
-                Explore Artworks
-              </Link>
-            </div>
-          ) : (
-            <div className="divide-y divide-[#eeeeee] border-y border-[#eeeeee]">
-              {orders.map((o) => {
-                const totalItems = (o.items ?? []).reduce((n, i) => n + i.quantity, 0);
-                return (
-                  <div
-                    key={o.id}
-                    className="py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-left"
-                  >
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[16px] font-semibold text-[#3a3a3a]">
-                          Order #{o.display_id}
-                        </span>
-                        {o.status && (
-                          <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 bg-[#f4f4f4] text-[#6b6b6b]">
-                            {o.status}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[13px] text-[#6b6b6b] mt-1">
-                        {new Date(o.created_at).toLocaleDateString("en-US", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })}{" "}
-                        · {totalItems} {totalItems === 1 ? "piece" : "pieces"}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-6">
-                      <span className="text-[15px] font-medium text-[#3a3a3a] tabular-nums">
-                        {formatMoney(o.total, o.currency_code)}
-                      </span>
-                      <Link
-                        href={`/order/${o.id}`}
-                        className="text-[13px] text-[#3a3a3a] underline underline-offset-4 decoration-[#3a3a3a] hover:opacity-75 transition-opacity"
-                      >
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab: Commissions */}
-      {activeTab === "commissions" && (
-        <div className="space-y-6">
-          <CommissionsAccountTab initialCommissions={commissionsList} />
-        </div>
-      )}
-
-      {/* Tab: Trade Program */}
-      {activeTab === "trade" && (
-        <div className="space-y-6">
-          {tradeApp ? (
-            <div className="border border-[#E5E5E5] bg-[#FAF9F7] p-7 sm:p-10 text-left space-y-6">
-              {/* Header Status Row */}
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-[#E5E5E5]">
-                <div>
-                  <div className="inline-flex items-center gap-2 mb-3">
-                    {tradeApp.status === "approved" && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-900 text-[11px] font-semibold tracking-wider uppercase rounded-full">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                        Approved • Active Trade Member
-                      </span>
-                    )}
-                    {tradeApp.status === "pending" && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-900 text-[11px] font-semibold tracking-wider uppercase rounded-full">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                        Application Pending Review
-                      </span>
-                    )}
-                    {tradeApp.status === "rejected" && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-900 text-[11px] font-semibold tracking-wider uppercase rounded-full">
-                        Application Not Approved
-                      </span>
-                    )}
-                  </div>
-                  <h2
-                    className="font-cormorant text-3xl sm:text-4xl text-[#111111] font-normal leading-tight"
-                    style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
-                  >
-                    {tradeApp.status === "approved"
-                      ? "Trade Program Membership"
-                      : tradeApp.status === "pending"
-                      ? "Application Under Review"
-                      : "Trade Application Status"}
-                  </h2>
-                  <p className="text-[14px] text-[#555555] mt-1.5 leading-relaxed">
-                    {tradeApp.status === "approved"
-                      ? "Welcome to the LITA Trade Program. Your exclusive design partner privileges are active."
-                      : tradeApp.status === "pending"
-                      ? "Your application has been received and is being verified by our Art Advisory desk."
-                      : "Your previous application was not approved. You can submit an updated application below."}
-                  </p>
-                </div>
-
-                {tradeApp.status === "approved" && (
-                  <Link
-                    href="/artworks"
-                    className="self-start sm:self-auto inline-flex items-center justify-center px-6 py-2.5 rounded-full border border-[#111111] bg-[#111111] text-white text-[13px] font-medium hover:bg-neutral-800 transition-colors shrink-0 shadow-sm"
-                  >
-                    Browse Collection
-                  </Link>
-                )}
-
-                {tradeApp.status === "rejected" && (
+                  Account Details
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection("your-addresses")}
+                  className="text-left hover:text-black hover:opacity-75 transition-opacity cursor-pointer"
+                >
+                  Your Addresses
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection("your-orders")}
+                  className="text-left hover:text-black hover:opacity-75 transition-opacity cursor-pointer"
+                >
+                  Your Orders
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection("followed-artists")}
+                  className="text-left hover:text-black hover:opacity-75 transition-opacity cursor-pointer"
+                >
+                  Followed Artists
+                </button>
+              </li>
+              {commissions.length > 0 && (
+                <li>
                   <button
                     type="button"
-                    onClick={() => setTradeModalOpen(true)}
-                    className="self-start sm:self-auto inline-flex items-center justify-center px-6 py-2.5 rounded-full border border-[#111111] bg-[#111111] text-white text-[13px] font-medium hover:bg-neutral-800 transition-colors shrink-0 cursor-pointer shadow-sm"
+                    onClick={() => setCommissionsModalOpen(true)}
+                    className="text-left hover:text-black hover:opacity-75 transition-opacity cursor-pointer flex items-center gap-2"
                   >
-                    Re-apply
+                    <span>Commissions</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-700 font-medium">
+                      {commissions.length}
+                    </span>
                   </button>
-                )}
-              </div>
-
-              {/* Application Details Summary */}
-              <div>
-                <h3 className="text-xs uppercase tracking-wider font-semibold text-[#777777] mb-3">
-                  Application Information
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px]">
-                  <div className="bg-white p-4 border border-[#EBEBEB]">
-                    <span className="text-[11px] uppercase tracking-wider text-[#888888] block mb-1">
-                      Applicant Name
-                    </span>
-                    <span className="text-[#111111] font-medium text-[15px] block">{tradeApp.name}</span>
-                    <span className="text-[#777777] text-xs font-mono">{tradeApp.email}</span>
-                  </div>
-
-                  <div className="bg-white p-4 border border-[#EBEBEB]">
-                    <span className="text-[11px] uppercase tracking-wider text-[#888888] block mb-1">
-                      Studio / Firm
-                    </span>
-                    <span className="text-[#111111] font-medium text-[15px] block">
-                      {tradeApp.company || "Independent Professional"}
-                    </span>
-                    <span className="text-[#777777] text-xs">{tradeApp.role || "Design Discipline"}</span>
-                  </div>
-
-                  <div className="bg-white p-4 border border-[#EBEBEB]">
-                    <span className="text-[11px] uppercase tracking-wider text-[#888888] block mb-1">
-                      Application Date
-                    </span>
-                    <span className="text-[#111111] font-medium text-[14px] block">
-                      {new Date(tradeApp.created_at).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </span>
-                    <span className="text-[#777777] text-xs">
-                      {tradeApp.status === "approved" ? "Status: Verified" : "Status: In Queue"}
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-4 border border-[#EBEBEB]">
-                    <span className="text-[11px] uppercase tracking-wider text-[#888888] block mb-1">
-                      Phone & Portfolio
-                    </span>
-                    <span className="text-[#111111] font-medium text-[14px] block">
-                      {tradeApp.phone || "No phone provided"}
-                    </span>
-                    {tradeApp.website ? (
-                      <a
-                        href={tradeApp.website.startsWith("http") ? tradeApp.website : `https://${tradeApp.website}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[#111111] text-xs underline underline-offset-2 hover:opacity-75 truncate block mt-0.5"
-                      >
-                        {tradeApp.website}
-                      </a>
-                    ) : (
-                      <span className="text-[#777777] text-xs">No website provided</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Message / Project Scope Preview */}
-              {tradeApp.message && (
-                <div className="bg-white p-5 border border-[#EBEBEB] text-[13px]">
-                  <span className="text-[11px] uppercase tracking-wider text-[#888888] block mb-1.5 font-medium">
-                    Project Scope / Notes
-                  </span>
-                  <p className="text-[#444444] text-[14px] leading-relaxed whitespace-pre-wrap">
-                    {tradeApp.message}
-                  </p>
-                </div>
+                </li>
               )}
-
-              {/* Privileges or Expedite Banner */}
-              {tradeApp.status === "approved" ? (
-                <div className="bg-white p-6 border border-[#EAEAEA] space-y-3">
-                  <h3 className="text-xs uppercase tracking-wider font-semibold text-[#111111]">
-                    Your Active Trade Privileges
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] text-[#444444]">
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-emerald-700 font-bold">✓</span>
-                      <span>Exclusive trade discount applied across all works</span>
-                    </div>
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-emerald-700 font-bold">✓</span>
-                      <span>Dedicated art advisor moodboards & approvals</span>
-                    </div>
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-emerald-700 font-bold">✓</span>
-                      <span>Custom sizing, frame mockups & commissions</span>
-                    </div>
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-emerald-700 font-bold">✓</span>
-                      <span>White-glove courier & scheduled site delivery</span>
-                    </div>
-                  </div>
-                </div>
-              ) : tradeApp.status === "pending" ? (
-                <div className="bg-[#F0EFEB] p-5 border border-[#E0DED7] text-[13px] text-[#555555] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <span className="font-semibold text-[#111111] block mb-0.5">
-                      Need trade pricing for an immediate proposal?
-                    </span>
-                    <span>
-                      Our advisory desk can expedite verification for imminent presentation decks and project proposals.
-                    </span>
-                  </div>
-                  <Link
-                    href="/trade"
-                    className="shrink-0 text-xs font-semibold text-[#111111] underline underline-offset-4 hover:opacity-75"
-                  >
-                    Learn More
-                  </Link>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            /* Not Applied Yet */
-            <div className="border border-[#E5E5E5] bg-[#FAF9F7] p-8 sm:p-12 text-left space-y-8">
-              <div>
-                <span className="text-[11px] font-sans font-medium uppercase tracking-[0.2em] text-[#888888] block mb-2">
-                  Trade & Advisory
-                </span>
-                <h2
-                  className="font-cormorant text-3xl sm:text-4xl text-[#111111] font-normal leading-tight"
-                  style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
-                >
-                  Join the LITA Trade Program
-                </h2>
-                <p className="text-[15px] text-[#555555] mt-2 max-w-xl leading-relaxed">
-                  Tailored for interior designers, architects, commercial developers, and art consultants. Members receive tier pricing, dedicated art advisory, custom commissions, and white-glove logistics.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-[13px]">
-                <div className="bg-white p-5 border border-[#EBEBEB]">
-                  <span className="font-semibold text-[#111111] block mb-1.5 text-[14px]">
-                    Exclusive Trade Pricing
-                  </span>
-                  <p className="text-[#666666] leading-relaxed">
-                    Tiered designer pricing across original fine art, sculptures, and limited releases.
-                  </p>
-                </div>
-                <div className="bg-white p-5 border border-[#EBEBEB]">
-                  <span className="font-semibold text-[#111111] block mb-1.5 text-[14px]">
-                    Dedicated Art Advisor
-                  </span>
-                  <p className="text-[#666666] leading-relaxed">
-                    Personal curation based on your project moodboards, renderings, and floor plans.
-                  </p>
-                </div>
-                <div className="bg-white p-5 border border-[#EBEBEB]">
-                  <span className="font-semibold text-[#111111] block mb-1.5 text-[14px]">
-                    Logistics Concierge
-                  </span>
-                  <p className="text-[#666666] leading-relaxed">
-                    Seamless custom framing, insured crating, and white-glove installation coordination.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-2">
+              <li>
                 <button
                   type="button"
                   onClick={() => setTradeModalOpen(true)}
-                  className="inline-flex items-center justify-center px-8 py-3 rounded-full border border-[#111111] bg-[#111111] text-white text-[14px] font-medium hover:bg-neutral-800 transition-colors cursor-pointer shadow-sm"
+                  className="text-left hover:text-black hover:opacity-75 transition-opacity cursor-pointer"
                 >
-                  Apply for Trade Program
+                  {tradeApplication?.status === "approved"
+                    ? "Trade Membership"
+                    : tradeApplication?.status === "pending"
+                    ? "Trade Status"
+                    : "Trade Signup"}
                 </button>
-                <Link
-                  href="/trade"
-                  className="text-[13px] text-[#555555] hover:text-[#111111] underline underline-offset-4"
+              </li>
+              <li className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={logoutPending}
+                  className="text-left text-[#555555] hover:text-black hover:opacity-75 transition-opacity cursor-pointer disabled:opacity-50"
                 >
-                  Explore program details & case studies
-                </Link>
-              </div>
+                  {logoutPending ? "Signing out…" : "Logout"}
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </aside>
+
+        {/* Right Main Content Sections */}
+        <main className="w-full max-w-[760px] space-y-16 md:space-y-20">
+          {/* SECTION 1: Account Details */}
+          <section id="account-details" className="scroll-mt-32">
+            <h2 className="font-cormorant text-3xl md:text-[34px] font-normal text-[#1a1a1a] mb-4">
+              Account Details
+            </h2>
+
+            <div className="space-y-1 text-[15px] text-[#333333]">
+              <p className="font-normal text-[#1a1a1a]">{displayName}</p>
+              <p className="text-[#555555]">{customer.email}</p>
             </div>
-          )}
+
+            {/* Quick action controls for editing profile & password */}
+            <div className="flex items-center gap-6 mt-4 pt-2">
+              <button
+                type="button"
+                onClick={() => setProfileModalOpen(true)}
+                className="text-[13px] text-[#222222] underline underline-offset-4 hover:opacity-75 transition-opacity cursor-pointer"
+              >
+                Edit details
+              </button>
+              <button
+                type="button"
+                onClick={() => setPasswordModalOpen(true)}
+                className="text-[13px] text-[#222222] underline underline-offset-4 hover:opacity-75 transition-opacity cursor-pointer"
+              >
+                Change password
+              </button>
+            </div>
+          </section>
+
+          {/* SECTION 2: Your Addresses */}
+          <section id="your-addresses" className="scroll-mt-32">
+            <h2 className="font-cormorant text-3xl md:text-[34px] font-normal text-[#1a1a1a] mb-4">
+              Your Addresses
+            </h2>
+
+            {addresses.length === 0 ? (
+              <div>
+                <p className="text-[15px] text-[#555555] mb-6">
+                  You have not added any addresses
+                </p>
+                <div className="flex justify-center pt-2 pb-4">
+                  <button
+                    type="button"
+                    onClick={openNewAddressModal}
+                    className="inline-flex items-center justify-center px-8 py-2.5 rounded-full border border-[#222222] bg-white text-[#222222] text-[14px] hover:bg-[#222222] hover:text-white transition-colors duration-200 cursor-pointer"
+                  >
+                    Add new address +
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {addresses.map((addr) => (
+                    <div
+                      key={addr.id}
+                      className="border border-[#e5e5e5] p-5 rounded-none bg-white relative flex flex-col justify-between"
+                    >
+                      <div className="text-[14px] text-[#444444] space-y-1">
+                        <p className="font-medium text-[#111111]">
+                          {addr.first_name} {addr.last_name}
+                        </p>
+                        {addr.company && <p className="text-xs text-[#777777]">{addr.company}</p>}
+                        <p>{addr.address_1}</p>
+                        {addr.address_2 && <p>{addr.address_2}</p>}
+                        <p>
+                          {addr.city}
+                          {addr.province ? `, ${addr.province}` : ""} {addr.postal_code}
+                        </p>
+                        <p className="uppercase text-xs tracking-wider text-[#777777]">
+                          {addr.country_code}
+                        </p>
+                        {addr.phone && <p className="text-xs text-[#777777] pt-1">{addr.phone}</p>}
+                      </div>
+
+                      <div className="flex items-center gap-4 mt-4 pt-3 border-t border-[#f0f0f0] text-xs">
+                        <button
+                          type="button"
+                          onClick={() => openEditAddressModal(addr)}
+                          className="text-[#222222] underline underline-offset-2 hover:opacity-75 cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAddress(addr.id)}
+                          className="text-[#888888] hover:text-red-700 underline underline-offset-2 transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={openNewAddressModal}
+                    className="inline-flex items-center justify-center px-8 py-2.5 rounded-full border border-[#222222] bg-white text-[#222222] text-[14px] hover:bg-[#222222] hover:text-white transition-colors duration-200 cursor-pointer"
+                  >
+                    Add new address +
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* SECTION 3: Your Orders */}
+          <section id="your-orders" className="scroll-mt-32">
+            <h2 className="font-cormorant text-3xl md:text-[34px] font-normal text-[#1a1a1a] mb-2">
+              Your Orders
+            </h2>
+            <p className="text-[14px] text-[#555555] mb-4">Orders ({orders.length})</p>
+
+            <hr className="w-full border-t border-[#e5e5e5] mb-6" />
+
+            {orders.length > 0 && (
+              <div className="divide-y divide-[#eeeeee]">
+                {orders.map((o) => {
+                  const totalItems = (o.items ?? []).reduce((n, i) => n + i.quantity, 0);
+                  return (
+                    <div
+                      key={o.id}
+                      className="py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[15px] font-medium text-[#222222]">
+                            Order #{o.display_id}
+                          </span>
+                          {o.status && (
+                            <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 bg-[#f4f4f4] text-[#6b6b6b]">
+                              {o.status}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[13px] text-[#777777] mt-1">
+                          {new Date(o.created_at).toLocaleDateString("en-US", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })}{" "}
+                          · {totalItems} {totalItems === 1 ? "piece" : "pieces"}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                        <span className="text-[15px] font-medium text-[#222222] tabular-nums">
+                          {formatMoney(o.total, o.currency_code)}
+                        </span>
+                        <Link
+                          href={`/order/${o.id}`}
+                          className="text-[13px] text-[#222222] underline underline-offset-4 hover:opacity-75 transition-opacity"
+                        >
+                          View Details
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* SECTION 4: Followed Artists */}
+          <section id="followed-artists" className="scroll-mt-32">
+            <h2 className="font-cormorant text-3xl md:text-[34px] font-normal text-[#1a1a1a] mb-2">
+              Followed Artists
+            </h2>
+            <p className="text-[14px] text-[#555555] mb-4">
+              Receive previews, exhibition invites, and updates for your saved artists.
+            </p>
+
+            <hr className="w-full border-t border-[#e5e5e5] mb-4" />
+
+            <p className="text-[14px] text-[#444444] mb-4">
+              Artists ({followedArtists.length})
+            </p>
+
+            {followedArtists.length > 0 ? (
+              <div className="border-b border-[#e5e5e5]">
+                {followedArtists.map((artistName) => (
+                  <div
+                    key={artistName}
+                    className="py-4 border-t border-[#e5e5e5] flex items-center justify-between"
+                  >
+                    <span className="font-cormorant text-[22px] md:text-[24px] font-normal text-[#1a1a1a]">
+                      {artistName}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleFollowArtist(artistName)}
+                      className="inline-flex items-center justify-center px-6 py-1.5 rounded-full border border-[#777777] text-[#222222] text-[13px] hover:border-black hover:bg-neutral-50 transition-colors cursor-pointer"
+                    >
+                      Following ✓
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-6 border-y border-[#e5e5e5] text-center text-[14px] text-[#777777]">
+                You are not following any artists yet.
+              </div>
+            )}
+
+            <div className="flex justify-center mt-8">
+              <Link
+                href="/artworks"
+                className="inline-flex items-center justify-center px-8 py-2.5 rounded-full border border-[#222222] bg-white text-[#222222] text-[14px] hover:bg-[#222222] hover:text-white transition-colors duration-200"
+              >
+                Browse Artists
+              </Link>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      {/* 3. Address Modal (Add / Edit) */}
+      {addressModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-[#EAEAEA] max-w-[540px] w-full p-6 sm:p-8 text-left max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between pb-4 border-b border-[#EAEAEA] mb-6">
+              <h3 className="font-cormorant text-2xl text-[#111111]">
+                {editingAddress ? "Edit Address" : "Add New Address"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAddressModalOpen(false)}
+                className="text-neutral-400 hover:text-black text-xl cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddressSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    value={addrFirstName}
+                    onChange={(e) => setAddrFirstName(e.target.value)}
+                    required
+                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={addrLastName}
+                    onChange={(e) => setAddrLastName(e.target.value)}
+                    required
+                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Company (optional)
+                </label>
+                <input
+                  type="text"
+                  value={addrCompany}
+                  onChange={(e) => setAddrCompany(e.target.value)}
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Street Address
+                </label>
+                <input
+                  type="text"
+                  value={addrAddress1}
+                  onChange={(e) => setAddrAddress1(e.target.value)}
+                  placeholder="House number and street name"
+                  required
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Apartment, suite, unit (optional)
+                </label>
+                <input
+                  type="text"
+                  value={addrAddress2}
+                  onChange={(e) => setAddrAddress2(e.target.value)}
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={addrCity}
+                    onChange={(e) => setAddrCity(e.target.value)}
+                    required
+                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                    State / Province
+                  </label>
+                  <input
+                    type="text"
+                    value={addrProvince}
+                    onChange={(e) => setAddrProvince(e.target.value)}
+                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                    Postal Code
+                  </label>
+                  <input
+                    type="text"
+                    value={addrPostalCode}
+                    onChange={(e) => setAddrPostalCode(e.target.value)}
+                    required
+                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                    Country
+                  </label>
+                  <select
+                    value={addrCountryCode}
+                    onChange={(e) => setAddrCountryCode(e.target.value)}
+                    className="w-full h-11 px-3 border border-[#d8d8d8] bg-white text-[14px] focus:outline-none focus:border-black"
+                  >
+                    <option value="us">United States</option>
+                    <option value="gb">United Kingdom</option>
+                    <option value="ca">Canada</option>
+                    <option value="au">Australia</option>
+                    <option value="in">India</option>
+                    <option value="fr">France</option>
+                    <option value="de">Germany</option>
+                    <option value="it">Italy</option>
+                    <option value="es">Spain</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Phone (for delivery)
+                </label>
+                <input
+                  type="tel"
+                  value={addrPhone}
+                  onChange={(e) => setAddrPhone(e.target.value)}
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
+
+              {addressError && (
+                <p className="text-xs text-red-600 pt-1">{addressError}</p>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#EAEAEA]">
+                <button
+                  type="button"
+                  onClick={() => setAddressModalOpen(false)}
+                  className="px-5 py-2 text-[14px] text-neutral-600 hover:text-black cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addressPending}
+                  className="inline-flex items-center justify-center px-6 py-2.5 rounded-full bg-[#111111] text-white text-[14px] hover:bg-neutral-800 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {addressPending ? "Saving…" : "Save Address"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* Tab: Profile */}
-      {activeTab === "profile" && (
-        <form onSubmit={handleProfileSubmit} className="space-y-6 max-w-[480px] text-left">
-          <div>
-            <label className="block text-[14px] font-semibold text-[#3a3a3a] mb-2 font-hanken">
-              First Name
-            </label>
-            <input
-              type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-              className="w-full h-[62px] bg-[#f4f4f4] border-0 border-b border-[#3a3a3a] rounded-none px-[18px] text-[15px] text-[#3a3a3a] focus:outline-none focus:border-b-2 focus:border-black focus:ring-1 focus:ring-black"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[14px] font-semibold text-[#3a3a3a] mb-2 font-hanken">
-              Last Name
-            </label>
-            <input
-              type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              required
-              className="w-full h-[62px] bg-[#f4f4f4] border-0 border-b border-[#3a3a3a] rounded-none px-[18px] text-[15px] text-[#3a3a3a] focus:outline-none focus:border-b-2 focus:border-black focus:ring-1 focus:ring-black"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[14px] font-semibold text-[#3a3a3a] mb-2 font-hanken">
-              Email
-            </label>
-            <input
-              type="email"
-              value={customer.email}
-              disabled
-              className="w-full h-[62px] bg-[#ebebeb] border-0 border-b border-[#3a3a3a] rounded-none px-[18px] text-[15px] text-[#777777] cursor-not-allowed"
-            />
-            <p className="mt-1 text-[12px] text-[#888888]">
-              To change your primary email address, please contact gallery support.
-            </p>
-          </div>
-
-          <div className="flex items-start gap-3 pt-2">
-            <input
-              id="account-marketing-opt"
-              type="checkbox"
-              checked={marketingOptIn}
-              onChange={(e) => setMarketingOptIn(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded-none border border-[#3a3a3a] text-[#3a3a3a] focus:ring-0 cursor-pointer accent-[#3a3a3a]"
-            />
-            <label
-              htmlFor="account-marketing-opt"
-              className="text-[13px] leading-snug text-[#6b6b6b] cursor-pointer"
-            >
-              Email me about new releases, exhibitions, and exclusive offers.
-            </label>
-          </div>
-
-          {/* Trade Membership Status Summary */}
-          <div className="pt-6 border-t border-[#EAEAEA]">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="block text-[14px] font-semibold text-[#3a3a3a] font-hanken">
-                  Trade Program Membership
-                </span>
-                <span className="text-[13px] text-[#777777] mt-0.5 block">
-                  {tradeApp?.status === "approved"
-                    ? "Status: Active Trade Member"
-                    : tradeApp?.status === "pending"
-                    ? "Status: Application Under Review"
-                    : tradeApp?.status === "rejected"
-                    ? "Status: Application Not Approved"
-                    : "Status: Not enrolled"}
-                </span>
-              </div>
+      {/* 4. Edit Profile Details Modal */}
+      {profileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-[#EAEAEA] max-w-[480px] w-full p-6 sm:p-8 text-left shadow-xl">
+            <div className="flex items-center justify-between pb-4 border-b border-[#EAEAEA] mb-6">
+              <h3 className="font-cormorant text-2xl text-[#111111]">Edit Account Details</h3>
               <button
                 type="button"
-                onClick={() => setActiveTab("trade")}
-                className="text-[13px] font-medium text-[#111111] underline underline-offset-4 hover:opacity-75 cursor-pointer"
+                onClick={() => setProfileModalOpen(false)}
+                className="text-neutral-400 hover:text-black text-xl cursor-pointer"
               >
-                {tradeApp ? "View Details" : "Apply"}
+                ✕
               </button>
             </div>
-          </div>
 
-          {profileMessage && (
-            <p
-              role="alert"
-              className={`text-[13px] ${
-                profileMessage.includes("saved") ? "text-green-700" : "text-[#b3261e]"
-              }`}
-            >
-              {profileMessage}
-            </p>
-          )}
+            <form onSubmit={handleProfileSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
 
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={profilePending}
-              className="inline-flex items-center justify-center w-[130px] h-[46px] rounded-full border border-[#3a3a3a] bg-transparent text-[#3a3a3a] text-[15px] hover:bg-[#3a3a3a] hover:text-white transition-colors duration-150 disabled:opacity-50 cursor-pointer"
-            >
-              {profilePending ? "Saving…" : "Save"}
-            </button>
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={customer.email}
+                  disabled
+                  className="w-full h-11 px-3 border border-[#e5e5e5] bg-[#f9f9f9] text-[#777777] text-[14px] cursor-not-allowed"
+                />
+              </div>
+
+              <div className="flex items-start gap-2.5 pt-2">
+                <input
+                  id="marketing-opt"
+                  type="checkbox"
+                  checked={marketingOptIn}
+                  onChange={(e) => setMarketingOptIn(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded-none accent-[#111111]"
+                />
+                <label htmlFor="marketing-opt" className="text-xs text-[#666666] leading-relaxed cursor-pointer">
+                  Receive previews, exhibition invites, and updates for saved artists and releases.
+                </label>
+              </div>
+
+              {profileMessage && (
+                <p
+                  className={`text-xs pt-1 ${
+                    profileMessage.error ? "text-red-600" : "text-green-700"
+                  }`}
+                >
+                  {profileMessage.text}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#EAEAEA]">
+                <button
+                  type="button"
+                  onClick={() => setProfileModalOpen(false)}
+                  className="px-5 py-2 text-[14px] text-neutral-600 hover:text-black cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={profilePending}
+                  className="inline-flex items-center justify-center px-6 py-2.5 rounded-full bg-[#111111] text-white text-[14px] hover:bg-neutral-800 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {profilePending ? "Saving…" : "Save Details"}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       )}
 
-      {/* Tab: Password */}
-      {activeTab === "password" && (
-        <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-[480px] text-left">
-          <div>
-            <label className="block text-[14px] font-semibold text-[#3a3a3a] mb-2 font-hanken">
-              Current Password
-            </label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-              placeholder="Enter your current password"
-              className="w-full h-[62px] bg-[#f4f4f4] border-0 border-b border-[#3a3a3a] rounded-none px-[18px] text-[15px] text-[#3a3a3a] placeholder:text-[#6b6b6b] focus:outline-none focus:border-b-2 focus:border-black focus:ring-1 focus:ring-black"
-            />
-          </div>
+      {/* 5. Change Password Modal */}
+      {passwordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-[#EAEAEA] max-w-[480px] w-full p-6 sm:p-8 text-left shadow-xl">
+            <div className="flex items-center justify-between pb-4 border-b border-[#EAEAEA] mb-6">
+              <h3 className="font-cormorant text-2xl text-[#111111]">Change Password</h3>
+              <button
+                type="button"
+                onClick={() => setPasswordModalOpen(false)}
+                className="text-neutral-400 hover:text-black text-xl cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-          <div>
-            <label className="block text-[14px] font-semibold text-[#3a3a3a] mb-2 font-hanken">
-              New Password
-            </label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              minLength={8}
-              placeholder="Enter new password (min. 8 characters)"
-              className="w-full h-[62px] bg-[#f4f4f4] border-0 border-b border-[#3a3a3a] rounded-none px-[18px] text-[15px] text-[#3a3a3a] placeholder:text-[#6b6b6b] focus:outline-none focus:border-b-2 focus:border-black focus:ring-1 focus:ring-black"
-            />
-          </div>
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                  placeholder="Enter current password"
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
 
-          <div>
-            <label className="block text-[14px] font-semibold text-[#3a3a3a] mb-2 font-hanken">
-              Confirm New Password
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              minLength={8}
-              placeholder="Confirm new password"
-              className="w-full h-[62px] bg-[#f4f4f4] border-0 border-b border-[#3a3a3a] rounded-none px-[18px] text-[15px] text-[#3a3a3a] placeholder:text-[#6b6b6b] focus:outline-none focus:border-b-2 focus:border-black focus:ring-1 focus:ring-black"
-            />
-          </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  placeholder="Min. 8 characters"
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
 
-          {passwordMessage && (
-            <p
-              role="alert"
-              className={`text-[13px] ${
-                passwordMessage.error ? "text-[#b3261e]" : "text-green-700"
-              }`}
-            >
-              {passwordMessage.text}
-            </p>
-          )}
+              <div>
+                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  placeholder="Re-enter new password"
+                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
+                />
+              </div>
 
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={passwordPending}
-              className="inline-flex items-center justify-center w-[130px] h-[46px] rounded-full border border-[#3a3a3a] bg-transparent text-[#3a3a3a] text-[15px] hover:bg-[#3a3a3a] hover:text-white transition-colors duration-150 disabled:opacity-50 cursor-pointer"
-            >
-              {passwordPending ? "Updating…" : "Update"}
-            </button>
+              {passwordMessage && (
+                <p
+                  className={`text-xs pt-1 ${
+                    passwordMessage.error ? "text-red-600" : "text-green-700"
+                  }`}
+                >
+                  {passwordMessage.text}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#EAEAEA]">
+                <button
+                  type="button"
+                  onClick={() => setPasswordModalOpen(false)}
+                  className="px-5 py-2 text-[14px] text-neutral-600 hover:text-black cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordPending}
+                  className="inline-flex items-center justify-center px-6 py-2.5 rounded-full bg-[#111111] text-white text-[14px] hover:bg-neutral-800 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {passwordPending ? "Updating…" : "Update Password"}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       )}
 
-      {/* Trade Application Modal */}
+      {/* 6. Commissions Modal (if customer has active commissions) */}
+      {commissionsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-[#EAEAEA] max-w-[640px] w-full p-6 sm:p-8 text-left max-h-[85vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between pb-4 border-b border-[#EAEAEA] mb-6">
+              <h3 className="font-cormorant text-2xl text-[#111111]">
+                Your Commissions ({commissions.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCommissionsModalOpen(false)}
+                className="text-neutral-400 hover:text-black text-xl cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="divide-y divide-[#eeeeee]">
+              {commissions.map((c) => (
+                <div key={c.id} className="py-4 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-[14px] text-[#222222]">
+                        Commission #{c.id.slice(0, 8)}
+                      </span>
+                      <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 bg-neutral-100 text-neutral-700">
+                        {c.status}
+                      </span>
+                    </div>
+                    {c.artist_name && (
+                      <p className="text-xs text-[#666666] mt-0.5">Artist: {c.artist_name}</p>
+                    )}
+                  </div>
+                  {c.quote_amount ? (
+                    <span className="text-[14px] font-medium text-[#222222]">
+                      {formatMoney(c.quote_amount, c.currency_code || "USD")}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[#888888]">In review</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Trade Application Modal */}
       <TradeApplicationModal
         isOpen={tradeModalOpen}
         onClose={() => {

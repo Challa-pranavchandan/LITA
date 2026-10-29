@@ -81,7 +81,10 @@ export async function getCustomer(): Promise<HttpTypes.StoreCustomer | null> {
   const headers = await getAuthHeaders();
   if (!headers.authorization) return null;
   try {
-    const { customer } = await sdk.store.customer.retrieve({}, headers);
+    const { customer } = await sdk.store.customer.retrieve(
+      { fields: "*addresses" },
+      headers
+    );
     return customer;
   } catch {
     return null;
@@ -392,6 +395,117 @@ export async function transferCart(): Promise<void> {
   const token = (await cookies()).get(JWT_COOKIE)?.value;
   if (token) {
     await syncGuestCart(token);
+  }
+}
+
+export type CustomerAddressPayload = {
+  first_name?: string;
+  last_name?: string;
+  company?: string;
+  address_1?: string;
+  address_2?: string;
+  city?: string;
+  country_code?: string;
+  province?: string;
+  postal_code?: string;
+  phone?: string;
+  is_default_shipping?: boolean;
+  is_default_billing?: boolean;
+};
+
+export async function addCustomerAddress(
+  payloadOrState: any,
+  formData?: FormData
+): Promise<{ ok: boolean; success?: boolean; error?: string | null }> {
+  const headers = await getAuthHeaders();
+  if (!headers.authorization) {
+    return { ok: false, success: false, error: "Not authenticated" };
+  }
+
+  let address: CustomerAddressPayload = {};
+
+  if (formData instanceof FormData) {
+    address = {
+      first_name: (formData.get("first_name") as string) || "",
+      last_name: (formData.get("last_name") as string) || "",
+      company: (formData.get("company") as string) || "",
+      address_1: (formData.get("address_1") as string) || "",
+      address_2: (formData.get("address_2") as string) || "",
+      city: (formData.get("city") as string) || "",
+      country_code: (formData.get("country_code") as string) || "us",
+      province: (formData.get("province") as string) || "",
+      postal_code: (formData.get("postal_code") as string) || "",
+      phone: (formData.get("phone") as string) || "",
+    };
+  } else if (payloadOrState && typeof payloadOrState === "object") {
+    address = payloadOrState;
+  }
+
+  try {
+    await sdk.store.customer.createAddress(address as any, {}, headers);
+    revalidatePath("/account");
+    return { ok: true, success: true, error: null };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to add address";
+    return { ok: false, success: false, error: message };
+  }
+}
+
+export async function deleteCustomerAddress(
+  addressId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const headers = await getAuthHeaders();
+  if (!headers.authorization) {
+    return { ok: false, error: "Not authenticated" };
+  }
+
+  try {
+    await sdk.store.customer.deleteAddress(addressId, headers);
+    revalidatePath("/account");
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to delete address";
+    return { ok: false, error: message };
+  }
+}
+
+export async function updateCustomerAddress(
+  addressIdOrState: any,
+  payloadOrFormData?: any
+): Promise<{ ok: boolean; success?: boolean; error?: string | null }> {
+  const headers = await getAuthHeaders();
+  if (!headers.authorization) {
+    return { ok: false, success: false, error: "Not authenticated" };
+  }
+
+  let addressId = typeof addressIdOrState === "string" ? addressIdOrState : "";
+  let address: CustomerAddressPayload = {};
+
+  if (payloadOrFormData instanceof FormData) {
+    addressId = (payloadOrFormData.get("address_id") as string) || addressId;
+    address = {
+      first_name: (payloadOrFormData.get("first_name") as string) || "",
+      last_name: (payloadOrFormData.get("last_name") as string) || "",
+      company: (payloadOrFormData.get("company") as string) || "",
+      address_1: (payloadOrFormData.get("address_1") as string) || "",
+      address_2: (payloadOrFormData.get("address_2") as string) || "",
+      city: (payloadOrFormData.get("city") as string) || "",
+      country_code: (payloadOrFormData.get("country_code") as string) || "us",
+      province: (payloadOrFormData.get("province") as string) || "",
+      postal_code: (payloadOrFormData.get("postal_code") as string) || "",
+      phone: (payloadOrFormData.get("phone") as string) || "",
+    };
+  } else if (payloadOrFormData && typeof payloadOrFormData === "object") {
+    address = payloadOrFormData;
+  }
+
+  try {
+    await sdk.store.customer.updateAddress(addressId, address as any, {}, headers);
+    revalidatePath("/account");
+    return { ok: true, success: true, error: null };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update address";
+    return { ok: false, success: false, error: message };
   }
 }
 

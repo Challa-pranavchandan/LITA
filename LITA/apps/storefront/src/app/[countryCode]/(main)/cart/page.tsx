@@ -1,21 +1,16 @@
-import { retrieveCart } from "@lib/data/cart"
-import { retrieveCustomer } from "@lib/data/customer"
-import CartTemplate from "@modules/cart/templates"
-import { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { getCart } from "@/lib/data/cart";
+import { CartView } from "@/components/CartView";
+import { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Cart",
+  title: "Your Cart",
   description: "View your cart",
-}
+};
 
 export default async function Cart() {
-  const cart = await retrieveCart().catch((error) => {
-    console.error(error)
-    return notFound()
-  })
+  const cart = await getCart();
 
-  const customer = await retrieveCustomer()
-
-  return <CartTemplate cart={cart} customer={customer} />
+  return <CartView cart={cart} />;
 }
+
