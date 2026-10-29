@@ -60,6 +60,9 @@ const isR2Configured = Boolean(
   process.env.R2_ENDPOINT
 )
 
+const allowDevPaymentPlaceholders =
+  process.env.ALLOW_DEV_PAYMENT_PLACEHOLDERS === "true"
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -101,17 +104,13 @@ module.exports = defineConfig({
             options: {
               key_id:
                 process.env.RAZORPAY_KEY_ID ||
-                (process.env.NODE_ENV !== "production"
-                  ? "rzp_test_placeholder"
-                  : ""),
+                (allowDevPaymentPlaceholders ? "rzp_test_placeholder" : ""),
               key_secret:
                 process.env.RAZORPAY_KEY_SECRET ||
-                (process.env.NODE_ENV !== "production" ? "dummy_secret" : ""),
+                (allowDevPaymentPlaceholders ? "dummy_secret" : ""),
               webhook_secret:
                 process.env.RAZORPAY_WEBHOOK_SECRET ||
-                (process.env.NODE_ENV !== "production"
-                  ? "dummy_webhook_secret"
-                  : ""),
+                (allowDevPaymentPlaceholders ? "dummy_webhook_secret" : ""),
             },
           },
         ],
