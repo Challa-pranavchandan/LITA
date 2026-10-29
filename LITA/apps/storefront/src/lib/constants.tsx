@@ -47,9 +47,11 @@ export const isStripeLike = (providerId?: string) => {
   )
 }
 
+export const RAZORPAY_PROVIDER_ID = "pp_razorpay_razorpay"
+
 export const isRazorpay = (providerId?: string) => {
   return (
-    providerId === "pp_razorpay_razorpay" ||
+    providerId === RAZORPAY_PROVIDER_ID ||
     providerId?.startsWith("pp_razorpay")
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { isRazorpay } from "@lib/constants"
+import { RAZORPAY_PROVIDER_ID, isRazorpay } from "@lib/constants"
 import { initiatePaymentSession, placeOrder } from "@lib/data/cart"
 import { HttpTypes } from "@medusajs/types"
 import { Button } from "@modules/common/components/ui"
@@ -82,13 +82,15 @@ export const RazorpayPaymentButton = ({
 }) => {
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [paymentCapturedId, setPaymentCapturedId] = useState<string | null>(null)
 
   const paymentSession = cart.payment_collection?.payment_sessions?.find(
     (s) => isRazorpay(s.provider_id)
   )
 
   const handlePayment = async () => {
-    if (!cart || submitting) return
+    // Prevent duplicate modal open or order creation if payment was already received
+    if (!cart || submitting || paymentCapturedId) return
 
     setErrorMessage(null)
     setSubmitting(true)
@@ -111,7 +113,7 @@ export const RazorpayPaymentButton = ({
 
       if (!orderId || !sessionKey || (configuredKey && sessionKey !== configuredKey)) {
         const updatedCollection = await initiatePaymentSession(cart, {
-          provider_id: "pp_razorpay_razorpay",
+          provider_id: RAZORPAY_PROVIDER_ID,
         })
         currentSession = updatedCollection?.payment_sessions?.find((s) =>
           isRazorpay(s.provider_id)
@@ -165,22 +167,26 @@ export const RazorpayPaymentButton = ({
         },
         handler: async (response: RazorpaySuccessResponse) => {
           setSubmitting(true)
+          setPaymentCapturedId(response.razorpay_payment_id)
           try {
             // A. Write verification fields into payment session data
             await initiatePaymentSession(cart, {
-              provider_id: "pp_razorpay_razorpay",
+              provider_id: RAZORPAY_PROVIDER_ID,
               data: {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_signature: response.razorpay_signature,
-                amount,
               },
             })
 
             // B. Complete the cart to create the Medusa order
             const res = await placeOrder()
             if (res && !res.ok) {
-              setErrorMessage(res.error || "Failed to complete order.")
+              setErrorMessage(
+                `Payment was received successfully (Reference: ${response.razorpay_payment_id}). ` +
+                "Your order will be confirmed shortly. Please do not submit payment again. " +
+                "You can refresh the page or check your account."
+              )
               setSubmitting(false)
             }
           } catch (err: any) {
@@ -189,7 +195,10 @@ export const RazorpayPaymentButton = ({
             if (err?.digest?.startsWith?.("NEXT_REDIRECT") || err?.message === "NEXT_REDIRECT") {
               throw err
             }
-            setErrorMessage(err?.message || "Payment verification failed.")
+            setErrorMessage(
+              `Payment was received successfully (Reference: ${response.razorpay_payment_id}). ` +
+              "Your order will be confirmed shortly. Please do not submit another payment."
+            )
             setSubmitting(false)
           }
         },
@@ -221,14 +230,23 @@ export const RazorpayPaymentButton = ({
   return (
     <>
       <Button
-        disabled={notReady || submitting}
+        disabled={notReady || submitting || Boolean(paymentCapturedId)}
         onClick={handlePayment}
         size="large"
         isLoading={submitting}
         data-testid={dataTestId || "razorpay-payment-button"}
       >
-        Pay with Razorpay
+        {paymentCapturedId ? "Payment Received" : "Pay with Razorpay"}
       </Button>
+      {paymentCapturedId && (
+        <div className="p-3 mt-3 text-xs leading-relaxed text-amber-900 bg-amber-50 border border-amber-200 rounded">
+          <p className="font-semibold">Payment Received (Reference: {paymentCapturedId})</p>
+          <p className="mt-1">
+            Your payment was received and your order will be confirmed shortly.
+            Please do not submit a second payment.
+          </p>
+        </div>
+      )}
       <ErrorMessage
         error={errorMessage}
         data-testid="razorpay-payment-error-message"

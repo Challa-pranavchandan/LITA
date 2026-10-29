@@ -26,6 +26,18 @@ const Payment = ({
   cart: HttpTypes.StoreCart
   availablePaymentMethods: { id: string }[]
 }) => {
+  const isIndiaRegion =
+    cart.currency_code?.toLowerCase() === "inr" ||
+    cart.region?.currency_code?.toLowerCase() === "inr"
+
+  // Make Razorpay the only payment option shown, and only for the India/INR region.
+  const paymentMethods = availablePaymentMethods?.filter((method) => {
+    if (isIndiaRegion) {
+      return isRazorpay(method.id)
+    }
+    return !isRazorpay(method.id)
+  }) || []
+
   const activeSession = cart.payment_collection?.payment_sessions?.find(
     (paymentSession) => paymentSession.status === "pending"
   )
@@ -34,7 +46,7 @@ const Payment = ({
   const [error, setError] = useState<string | null>(null)
   const [paymentComplete, setPaymentComplete] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(
-    activeSession?.provider_id ?? ""
+    activeSession?.provider_id ?? (paymentMethods.length === 1 ? paymentMethods[0].id : "")
   )
 
   const searchParams = useSearchParams()
@@ -52,6 +64,12 @@ const Payment = ({
       })
     }
   }
+
+  useEffect(() => {
+    if (!selectedPaymentMethod && paymentMethods.length === 1) {
+      setPaymentMethod(paymentMethods[0].id)
+    }
+  }, [paymentMethods, selectedPaymentMethod])
 
   const paidByGiftcard = !!(
     (cart as unknown as Record<string, unknown>)?.gift_cards && ((cart as unknown as Record<string, unknown>)?.gift_cards as unknown[])?.length > 0 && cart?.total === 0
@@ -140,13 +158,13 @@ const Payment = ({
       </div>
       <div>
         <div className={isOpen ? "block" : "hidden"}>
-          {!paidByGiftcard && availablePaymentMethods?.length && (
+          {!paidByGiftcard && paymentMethods?.length > 0 && (
             <>
               <RadioGroup
                 value={selectedPaymentMethod}
                 onChange={(value: string) => setPaymentMethod(value)}
               >
-                {availablePaymentMethods.map((paymentMethod) => (
+                {paymentMethods.map((paymentMethod) => (
                   <div key={paymentMethod.id}>
                     {isStripeLike(paymentMethod.id) ? (
                       <StripePaymentContainer
@@ -167,6 +185,12 @@ const Payment = ({
                 ))}
               </RadioGroup>
             </>
+          )}
+
+          {!paidByGiftcard && paymentMethods?.length === 0 && (
+            <div className="py-4 text-ui-fg-muted text-sm">
+              No payment methods available for this currency.
+            </div>
           )}
 
           {paidByGiftcard && (
