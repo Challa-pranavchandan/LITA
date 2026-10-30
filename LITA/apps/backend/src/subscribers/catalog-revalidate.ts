@@ -24,9 +24,11 @@ export default async function catalogRevalidateHandler({
   try {
     const res = await fetch(`${storefrontUrl}/api/revalidate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "x-revalidate-secret": secret,
+      },
       body: JSON.stringify({
-        secret,
         event: event.name,
       }),
     })

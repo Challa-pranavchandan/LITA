@@ -373,6 +373,14 @@
     - **Documentation:** Added Section 9 *"Production Checklist: Regions & Payment Providers"* to `docs/razorpay.md`.
     - **Automated Tests:** Created unit test suite in `apps/storefront/src/__tests__/payment-guard.test.js` validating all production and non-production provider acceptance/rejection scenarios (25 tests passing).
 
+27. **B2 — Hardening of ISR Revalidate Endpoint (Revalidate Auth & Secret Guard):**
+    - **Constant-Time Verification Utility:** Created `apps/storefront/src/lib/security/revalidate-auth.ts` exporting `verifyRevalidateSecret(provided)`. Enforces minimum 32-character length on `process.env.REVALIDATE_SECRET`, checks for non-empty provided secret string, and uses SHA-256 hashing with `crypto.timingSafeEqual` for constant-time comparison.
+    - **Secure POST-Only Route Handler:** Completely removed the `GET` handler in `apps/storefront/src/app/api/revalidate/route.ts` to prevent query secrets from leaking into server access logs and browser histories. Prioritizes the `x-revalidate-secret` request header (falling back to `body.secret` for backwards compatibility), verifies via `verifyRevalidateSecret`, responds with generic 401 on failure, retains cache eviction (`clearCatalogCache`, tags, and paths), and returns a minimal response (`{ ok: true, revalidated: true }`).
+    - **Backend Callers Updated:** Updated `apps/backend/src/subscribers/catalog-revalidate.ts` and `apps/backend/src/api/admin/gallery/layout/route.ts` to transmit the revalidation secret via the `x-revalidate-secret` header rather than the JSON body.
+    - **Production Startup Guard:** Added `REVALIDATE_SECRET` (min 32 characters) to the production startup guard in `apps/backend/medusa-config.ts` (`NODE_ENV === 'production'`).
+    - **Environment Documentation:** Replaced the real-looking secret in `apps/storefront/.env.example` and `.env.template` with `replace-with-32-plus-random-chars` and documented token generation command. Added `REVALIDATE_SECRET` with generator instructions to `apps/backend/.env.example` and `apps/backend/.env.template`.
+    - **Automated Tests:** Created unit test suite `apps/storefront/src/__tests__/revalidate-auth.test.js` (9 passing tests) verifying unset env, empty env, short env, missing provided values, wrong values, valid secrets, route POST-only integrity, and regression testing ensuring the previous `undefined === undefined` authentication bypass cannot occur.
+
 ---
 
 ## 6. Production Readiness Audit (30 Oct 2026)
@@ -410,9 +418,14 @@ Resolved across storefront UI, Server Actions, backend configuration scripts, an
 - Seed Guard: `initial-data-seed.ts` is guarded behind `SEED_DEMO_DATA=true`.
 - Documentation: Added Section 9 to `docs/razorpay.md`. Verified with 25 passing unit tests.
 
-**B2. Revalidate endpoint can be called without a secret.**
-`apps/storefront/src/app/api/revalidate/route.ts` compares `secret !== process.env.REVALIDATE_SECRET`. If the env var is unset and the request sends no secret, `undefined !== undefined` is false, so the request is accepted. The GET variant also puts the secret in the URL (ends up in logs). `.env.example` ships a real-looking value (`lita_gallery_revalidate_secret_2026`), and the backend `.env.example` does not list `REVALIDATE_SECRET` at all.
-Fix: reject when the env var is empty, use a timing-safe compare, remove the GET handler, rotate the secret, add it to the backend env template, use a placeholder in examples.
+**B2. Revalidate endpoint can be called without a secret. (RESOLVED)**
+Resolved across storefront route, backend subscribers, and configuration guards:
+- Constant-time secret verification helper (`apps/storefront/src/lib/security/revalidate-auth.ts`) requiring minimum 32 chars on `REVALIDATE_SECRET` and comparing SHA-256 digests via `crypto.timingSafeEqual`.
+- Removed `GET` handler from `apps/storefront/src/app/api/revalidate/route.ts`; requires `x-revalidate-secret` header (or `body.secret` fallback) and returns 401 with generic message on mismatch.
+- Backend `catalog-revalidate.ts` subscriber and `gallery/layout/route.ts` send secret via `x-revalidate-secret` header.
+- Production startup guard in `apps/backend/medusa-config.ts` enforces `REVALIDATE_SECRET` >= 32 chars.
+- Environment files updated with safe placeholders and generator comments.
+- 9 unit tests passing in `apps/storefront/src/__tests__/revalidate-auth.test.js`.
 
 **B3. Trade application lookup leaks personal data.**
 `GET /store/trade-applications?email=...` (`apps/backend/src/api/store/trade-applications/route.ts`) accepts an unauthenticated email and returns that person's name, phone, company and message. The publishable key is public, so anyone can enumerate. It also fetches only the newest 100 rows and filters in memory, so results go wrong once there are more than 100.
@@ -549,6 +562,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **CP0 — Clean build baseline:** single lockfile, all imports declared, dead starter code deleted, `lint`/`typecheck`/`test` scripts wired, build/lint/test pass with zero ignored errors (section 5 item 25)
 - [x] **CP3 — Transactional emails:** Notification module + custom Resend provider, order placed and fulfilled emails, trade and commission status emails, hardened production logging (section 5 item 24)
 - [x] **B1 — Remove manual payment path:** Storefront UI + server-side action guards, check:prod-config backend validation script, SEED_DEMO_DATA guard, 25 unit tests passed (section 5 item 26)
+- [x] **B2 — Hardening ISR revalidate endpoint:** constant-time verification, header-preferred POST-only route, Medusa production startup guard, backend subscriber header auth, 9 unit tests passed (section 5 item 27)
 
 ### CP0 - Clean baseline (COMPLETE — exit test passed)
 - [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
@@ -563,7 +577,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 
 ### CP1 - Security fixes
 - [x] Remove/gate `pp_system_default` (B1)
-- [ ] Fix revalidate auth, drop GET, rotate secret, add to backend env (B2)
+- [x] Fix revalidate auth, drop GET, rotate secret, add to backend env (B2)
 - [ ] Require auth on trade lookup and filter in query (B3)
 - [ ] Strip `webhook_verified` and client `razorpay_order_id` from client data (B8)
 - [ ] Make `refundPayment` throw when no payment id (B8)

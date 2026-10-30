@@ -10,8 +10,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   if (process.env.STOREFRONT_URL && process.env.REVALIDATE_SECRET) {
     fetch(`${process.env.STOREFRONT_URL}/api/revalidate`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secret: process.env.REVALIDATE_SECRET, tag: "gallery" }),
+      headers: {
+        "content-type": "application/json",
+        "x-revalidate-secret": process.env.REVALIDATE_SECRET,
+      },
+      body: JSON.stringify({ tag: "gallery" }),
     }).catch(() => {})
   }
 

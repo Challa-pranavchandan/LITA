@@ -11,6 +11,7 @@ if (process.env.NODE_ENV === 'production') {
   const requiredSecrets: Array<{ key: string; minLength: number }> = [
     { key: 'JWT_SECRET', minLength: 32 },
     { key: 'COOKIE_SECRET', minLength: 32 },
+    { key: 'REVALIDATE_SECRET', minLength: 32 },
   ]
   for (const { key, minLength } of requiredSecrets) {
     const value = process.env[key]
