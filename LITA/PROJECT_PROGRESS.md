@@ -396,9 +396,22 @@
     - **Amount & Balance Validation:** Enforces `amount > 0`. Queries Razorpay via `client_.payments.fetch(paymentId)` and validates that requested `refundPaise` does not exceed `capturedPaise` (`payment.amount`) and does not exceed remaining refundable balance (`capturedPaise - (payment.amount_refunded || 0)`), throwing `INVALID_DATA` on mismatch.
     - **Idempotency Protection:** Forwards Medusa's idempotency key (`context.idempotency_key`) or refund ID (`data.refund_id`) as Razorpay's `receipt` (max 40 characters) and notes (`payment_id`, `receipt`, `medusa_refund_id`), preventing duplicate refunds on retries after network timeouts. Documented idempotency mechanics directly in code comments.
     - **Hardened Error Handling & Sanitized Logging:** Catches fetch and refund failures, logging only the payment ID and error message (strictly never leaking secrets or authentication keys), and throws `MedusaError(MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR, ...)` with descriptive messages.
-    - **Automated Tests:** Added 8 comprehensive unit tests to `apps/backend/src/modules/razorpay/__tests__/razorpay-provider.unit.spec.ts` covering missing ID, zero/negative amounts, fetch failures, amount exceeding captured/remaining balances, refund API failures with sanitized logging, partial refunds with receipt/notes, and full refunds. All 47 tests pass.
+30. **B4 — Redis Infrastructure & Multi-Instance Worker Mode:**
+    - **Problem:** Production was reliant on in-memory event bus and workflow engine (events and queued workflow runs lost on server restart), lacked cross-instance distributed locks (exposing concurrent cart completion and webhook recovery to race conditions), and lacked support for separating HTTP traffic from asynchronous workers.
+    - **Redis Modules Integration:** Registered four official Medusa v2 modules in `apps/backend/medusa-config.ts` driven by `REDIS_URL`:
+      - Event Bus: `@medusajs/medusa/event-bus-redis` for durable pub/sub events.
+      - Workflow Engine: `@medusajs/medusa/workflow-engine-redis` (`options: { redis: { redisUrl } }`) for durable step execution, retries, and compensation transactions.
+      - Distributed Locking: `@medusajs/medusa/locking` with provider `@medusajs/medusa/locking-redis` as default (`id: "locking-redis"`).
+      - Caching Module: `@medusajs/caching` with provider `@medusajs/medusa/caching-redis` as default (`id: "caching-redis"`).
+      - Session Storage: `projectConfig.redisUrl` configured for distributed Express session persistence.
+    - **Production Startup Fail-Fast Guard:** Enforces that `REDIS_URL` must be set in production and must use `redis://` or `rediss://` (TLS support for Upstash, Redis Cloud, Railway, AWS ElastiCache), throwing `MedusaError(INVALID_ARGUMENT)` on missing or invalid protocols.
+    - **Local Development Fallback:** When `REDIS_URL` is unset in non-production environments (`NODE_ENV !== "production"`), gracefully retains default in-memory engines and logs a clear startup warning.
+    - **Worker Mode & Admin Disabling:** Integrated `projectConfig.workerMode` driven by `MEDUSA_WORKER_MODE` (`"shared"` [default], `"server"`, or `"worker"`), and `admin.disable` driven by `DISABLE_MEDUSA_ADMIN=true` for dedicated worker deployments.
+    - **Service Scripts & Documentation:** Added `start:server` and `start:worker` scripts in `apps/backend/package.json`. Updated `.env.example` and `.env.template` with placeholders. Authored comprehensive architecture blueprint in `docs/infrastructure.md`.
+    - **Automated Tests:** Created 14 unit tests in `apps/backend/src/__tests__/medusa-config.unit.spec.ts` validating development in-memory defaults, Redis module registration, TLS URL support, production fail-fast protocol guards, workerMode resolution, and admin disabling. All 14 tests pass.
 
 ---
+
 
 ## 6. Production Readiness Audit (30 Oct 2026)
 
@@ -452,9 +465,14 @@ Resolved across backend routing, middleware authentication, transactional workfl
 - Storefront: Updated `getCustomerTradeApplication` to pass auth headers without `?email=` query. Updated `account/page.tsx` and prefilled `TradeApplicationModal` in `AccountDashboard.tsx`.
 - Verified with 15 backend unit tests and 4 storefront unit tests.
 
-**B4. Medusa runs on in-memory infrastructure.**
-`.env.example` lists `REDIS_URL`, but `medusa-config.ts` registers no Redis modules. In production that means the in-process event bus (events lost on restart, including the Razorpay webhook recovery subscriber), non-durable workflow runs, and no cross-instance locking (storefront cart completion and webhook recovery can race).
-Fix: add Redis event bus, workflow engine, locking and cache modules, set `redisUrl` for sessions, and split server/worker (`workerMode`). Check exact module names against the Medusa 2.21 docs.
+**B4. Medusa runs on in-memory infrastructure. (RESOLVED)**
+Resolved across backend configuration, multi-instance worker modes, production startup guards, environment templates, and documentation:
+- Redis Modules: Registered official Medusa v2 modules in `medusa-config.ts` driven by `REDIS_URL` (`@medusajs/medusa/event-bus-redis`, `@medusajs/medusa/workflow-engine-redis`, `@medusajs/medusa/locking` with `locking-redis` provider as default, `@medusajs/caching` with `caching-redis` provider as default, and `projectConfig.redisUrl` for session storage).
+- Production Startup Guard: Enforces `REDIS_URL` in production, validating protocols (`redis://` or `rediss://` for TLS).
+- Local Development Fallback: In non-production, missing `REDIS_URL` logs a startup warning and retains in-memory defaults.
+- Multi-Instance Support: Added `workerMode` ("shared" | "server" | "worker") via `MEDUSA_WORKER_MODE` and `admin.disable` via `DISABLE_MEDUSA_ADMIN`.
+- Scripts & Runbook: Added `start:server` and `start:worker` in `package.json`. Authored `docs/infrastructure.md`.
+- Automated Tests: 14 unit tests passing in `apps/backend/src/__tests__/medusa-config.unit.spec.ts`.
 
 **B5. Customers get no emails after paying (RESOLVED — CP3).**
 Resolved by integrating the Medusa Notification module (`@medusajs/medusa/notification`) with a custom Resend provider (`src/modules/resend`) in `medusa-config.ts`. Reused editorial branding from `password-reset.ts` (LITA Cormorant Garamond header, `#5f2f3c` brand palette, `#faf8f5` canvas, curated item summaries). Added Medusa subscribers for:
@@ -587,6 +605,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **B2 — Hardening ISR revalidate endpoint:** constant-time verification, header-preferred POST-only route, Medusa production startup guard, backend subscriber header auth, 9 unit tests passed (section 5 item 27)
 - [x] **B3 — Trade application data leak:** require customer authentication on GET, query-level case-insensitive filtering ($ilike) without in-memory limits, safe field projection, deduplication on POST, 15 backend unit tests + 4 storefront unit tests passed (section 5 item 28)
 - [x] **B8a — Razorpay refund hardening:** throw on missing payment ID, validate amount against captured payment, ensure idempotency via receipt/notes, safe logging without secrets, 8 unit tests passed (section 5 item 29)
+- [x] **B4 — Redis infrastructure & worker mode:** event bus, workflow engine, distributed locking, caching, workerMode, production startup guard, docs/infrastructure.md, 14 unit tests passed (section 5 item 30)
 
 ### CP0 - Clean baseline (COMPLETE — exit test passed)
 - [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
@@ -632,8 +651,8 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Verify sending domain, SPF, DKIM, DMARC
 
 ### CP4 - Infrastructure
-- [ ] Redis: event bus, workflow engine, locking, cache modules; `redisUrl` for sessions (B4)
-- [ ] Server/worker split (`workerMode`) and production start scripts
+- [x] Redis: event bus, workflow engine, locking, cache modules; `redisUrl` for sessions (B4)
+- [x] Server/worker split (`workerMode`) and production start scripts (B4)
 - [ ] Dockerfile(s) or platform config for backend, worker, storefront
 - [ ] GitHub Actions: install, lint, typecheck, test, build, migrate on release
 - [ ] Staging environment with its own Razorpay test keys and webhook

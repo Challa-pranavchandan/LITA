@@ -1,17 +1,17 @@
-import { loadEnv, defineConfig, MedusaError } from '@medusajs/framework/utils'
+import { loadEnv, defineConfig, MedusaError } from "@medusajs/framework/utils"
 
-loadEnv(process.env.NODE_ENV || 'development', process.cwd())
+loadEnv(process.env.NODE_ENV || "development", process.cwd())
 
 // ---------------------------------------------------------------------------
 // Production startup guard
 // Crashes immediately with a clear message rather than running with weak or
 // missing configuration. This block is a no-op in development.
 // ---------------------------------------------------------------------------
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === "production") {
   const requiredSecrets: Array<{ key: string; minLength: number }> = [
-    { key: 'JWT_SECRET', minLength: 32 },
-    { key: 'COOKIE_SECRET', minLength: 32 },
-    { key: 'REVALIDATE_SECRET', minLength: 32 },
+    { key: "JWT_SECRET", minLength: 32 },
+    { key: "COOKIE_SECRET", minLength: 32 },
+    { key: "REVALIDATE_SECRET", minLength: 32 },
   ]
   for (const { key, minLength } of requiredSecrets) {
     const value = process.env[key]
@@ -24,7 +24,7 @@ if (process.env.NODE_ENV === 'production') {
     }
   }
 
-  const requiredCors: Array<string> = ['STORE_CORS', 'ADMIN_CORS', 'AUTH_CORS']
+  const requiredCors: Array<string> = ["STORE_CORS", "ADMIN_CORS", "AUTH_CORS"]
   for (const key of requiredCors) {
     if (!process.env[key]) {
       throw new MedusaError(
@@ -36,11 +36,11 @@ if (process.env.NODE_ENV === 'production') {
   }
 
   const requiredR2: Array<string> = [
-    'R2_FILE_URL',
-    'R2_ACCESS_KEY_ID',
-    'R2_SECRET_ACCESS_KEY',
-    'R2_BUCKET',
-    'R2_ENDPOINT',
+    "R2_FILE_URL",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "R2_BUCKET",
+    "R2_ENDPOINT",
   ]
   for (const key of requiredR2) {
     if (!process.env[key]) {
@@ -50,8 +50,30 @@ if (process.env.NODE_ENV === 'production') {
       )
     }
   }
+
+  if (!process.env.REDIS_URL) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_ARGUMENT,
+      `[startup] REDIS_URL must be set in production. ` +
+      `Configure a Redis connection string (e.g. redis://default:pass@host:6379 or rediss:// for TLS).`
+    )
+  }
+  if (!process.env.REDIS_URL.startsWith("redis://") && !process.env.REDIS_URL.startsWith("rediss://")) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_ARGUMENT,
+      `[startup] REDIS_URL must start with redis:// or rediss:// (TLS enabled). Got: ${process.env.REDIS_URL.split("://")[0]}://...`
+    )
+  }
 }
 // ---------------------------------------------------------------------------
+
+const isRedisConfigured = Boolean(process.env.REDIS_URL)
+
+if (!isRedisConfigured && process.env.NODE_ENV !== "production") {
+  console.warn(
+    "[medusa-config] REDIS_URL is not set. Falling back to default in-memory event bus, workflow engine, locking, and caching providers for local development."
+  )
+}
 
 const isR2Configured = Boolean(
   process.env.R2_FILE_URL &&
@@ -64,12 +86,20 @@ const isR2Configured = Boolean(
 const allowDevPaymentPlaceholders =
   process.env.ALLOW_DEV_PAYMENT_PLACEHOLDERS === "true"
 
+const workerMode = (process.env.MEDUSA_WORKER_MODE as "shared" | "server" | "worker") || "shared"
+const disableMedusaAdmin = process.env.DISABLE_MEDUSA_ADMIN === "true"
+
 module.exports = defineConfig({
+  admin: {
+    disable: disableMedusaAdmin,
+  },
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     databaseDriverOptions: process.env.DATABASE_EXTRA
       ? JSON.parse(process.env.DATABASE_EXTRA)
       : undefined,
+    redisUrl: isRedisConfigured ? process.env.REDIS_URL : undefined,
+    workerMode,
     http: {
       storeCors: process.env.STORE_CORS!,
       adminCors: process.env.ADMIN_CORS!,
@@ -77,9 +107,57 @@ module.exports = defineConfig({
       jwtSecret: process.env.JWT_SECRET,
       cookieSecret: process.env.COOKIE_SECRET,
       jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
-    }
+    },
   },
   modules: [
+    ...(isRedisConfigured
+      ? [
+          {
+            resolve: "@medusajs/medusa/event-bus-redis",
+            options: {
+              redisUrl: process.env.REDIS_URL,
+            },
+          },
+          {
+            resolve: "@medusajs/medusa/workflow-engine-redis",
+            options: {
+              redis: {
+                redisUrl: process.env.REDIS_URL,
+              },
+            },
+          },
+          {
+            resolve: "@medusajs/medusa/locking",
+            options: {
+              providers: [
+                {
+                  resolve: "@medusajs/medusa/locking-redis",
+                  id: "locking-redis",
+                  is_default: true,
+                  options: {
+                    redisUrl: process.env.REDIS_URL,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            resolve: "@medusajs/caching",
+            options: {
+              providers: [
+                {
+                  resolve: "@medusajs/medusa/caching-redis",
+                  id: "caching-redis",
+                  is_default: true,
+                  options: {
+                    redisUrl: process.env.REDIS_URL,
+                  },
+                },
+              ],
+            },
+          },
+        ]
+      : []),
     {
       resolve: "./src/modules/journal",
     },
@@ -162,4 +240,3 @@ module.exports = defineConfig({
       : []),
   ],
 })
-
