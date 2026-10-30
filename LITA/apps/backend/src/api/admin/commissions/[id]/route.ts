@@ -99,5 +99,29 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   const updated = await commissionService.updateCommissions(updatePayload)
 
+  if (status !== undefined || quoted_price !== undefined) {
+    try {
+      const eventBus: any = req.scope.resolve(Modules.EVENT_BUS)
+      if (eventBus) {
+        await eventBus.emit({
+          name: "commission.status_changed",
+          data: {
+            id: updated.id,
+            customer_id: updated.customer_id,
+            title: updated.title,
+            status: updated.status,
+            previous_status: existing?.status,
+            quoted_price: updated.quoted_price,
+            currency_code: updated.currency_code,
+            admin_notes: updated.admin_notes,
+          },
+        })
+      }
+    } catch (err: any) {
+      console.warn(`[commissions] Failed to emit status changed event: ${err?.message}`)
+    }
+  }
+
   return res.status(200).json({ commission: updated })
 }
+

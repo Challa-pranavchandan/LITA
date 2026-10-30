@@ -1,4 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { Modules } from "@medusajs/framework/utils"
 import { COMMISSION_MODULE } from "../../../../../modules/commission"
 import CommissionModuleService from "../../../../../modules/commission/service"
 
@@ -33,8 +34,29 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     status: "accepted",
   })
 
+  try {
+    const eventBus: any = req.scope.resolve(Modules.EVENT_BUS)
+    if (eventBus) {
+      await eventBus.emit({
+        name: "commission.status_changed",
+        data: {
+          id: updated.id,
+          customer_id: updated.customer_id,
+          title: updated.title,
+          status: "accepted",
+          previous_status: "quoted",
+          quoted_price: updated.quoted_price,
+          currency_code: updated.currency_code,
+        },
+      })
+    }
+  } catch (err: any) {
+    console.warn(`[commissions] Failed to emit accept status event: ${err?.message}`)
+  }
+
   return res.status(200).json({
     message: "Quote accepted successfully! The artist will now create your order.",
     commission: updated,
   })
 }
+

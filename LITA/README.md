@@ -1,158 +1,165 @@
-<p align="center">
-  <a href="https://www.medusajs.com">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/59018053/229103275-b5e482bb-4601-46e6-8142-244f531cebdb.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    <img alt="Medusa logo" src="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    </picture>
-  </a>
-</p>
-<h1 align="center">
-  Medusa DTC Starter
-</h1>
+# LITA — Livin In The Art
 
-<h4 align="center">
-  <a href="https://docs.medusajs.com">Documentation</a> |
-  <a href="https://www.medusajs.com">Website</a>
-</h4>
+An editorial contemporary fine art ecommerce platform powered by **Medusa v2** and **Next.js 15 (App Router)**. Built for fine art collectors, interior designers, and bespoke commission clients in India.
 
-<p align="center">
-  Building blocks for digital commerce
-</p>
-<p align="center">
-  <a href="https://github.com/medusajs/medusa/blob/develop/LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="Medusa is released under the MIT license." />
-  </a>
-  <a href="https://circleci.com/gh/medusajs/medusa">
-    <img src="https://circleci.com/gh/medusajs/medusa.svg?style=shield" alt="Current CircleCI build status." />
-  </a>
-  <a href="https://github.com/medusajs/medusa/blob/develop/CONTRIBUTING.md">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs welcome!" />
-  </a>
-    <a href="https://www.producthunt.com/posts/medusa"><img src="https://img.shields.io/badge/Product%20Hunt-%231%20Product%20of%20the%20Day-%23DA552E" alt="Product Hunt"></a>
-  <a href="https://discord.gg/xpCwq3Kfn8">
-    <img src="https://img.shields.io/badge/chat-on%20discord-7289DA.svg" alt="Discord Chat" />
-  </a>
-  <a href="https://twitter.com/intent/follow?screen_name=medusajs">
-    <img src="https://img.shields.io/twitter/follow/medusajs.svg?label=Follow%20@medusajs" alt="Follow @medusajs" />
-  </a>
-</p>
+---
 
-# Medusa DTC Starter
+## 1. Architecture Overview
 
-A production-ready monorepo starter for direct-to-consumer ecommerce stores powered by Medusa and Next.js. Includes a fully featured storefront with product browsing, cart, checkout, customer accounts, and order management.
+- **Repository Architecture:** Turborepo monorepo (`npm` workspaces)
+- **Storefront (`apps/storefront`):** Next.js 15.5+ (App Router, Turbopack, React 19, Tailwind CSS v3, GSAP animations, `@medusajs/js-sdk`)
+- **Backend Engine (`apps/backend`):** Medusa v2 (`@medusajs/medusa` 2.21.2, Node.js 22+, Express, MikroORM, Knex)
+- **Database:** PostgreSQL on Supabase (`aws-0-ap-southeast-2.pooler.supabase.com:6543`) with SSL pooler connection
+- **Media & Asset Storage:** Cloudflare R2 (AWS S3-compatible Medusa file module provider)
+- **Payment Gateway:** **Razorpay** (`pp_razorpay_razorpay`) — UPI (Google Pay, PhonePe, Paytm, BHIM), Netbanking, Credit/Debit Cards, Wallets
+- **Target Market & Currency:** **India only**, Indian Rupee (**INR**, `₹`), default region `in`
+- **Transactional Email:** Resend REST API (password reset, studio notifications)
+- **Admin Dashboard:** Medusa Admin Dashboard (React 18 SPA served at `http://localhost:9000/app`)
 
-## Features
+---
 
-- All of [Medusa's commerce features](https://docs.medusajs.com/resources/commerce-modules)
-- Multi-region support with automatic country detection
-- Product catalog with variant selection
-- Cart with promotion codes
-- Multi-step checkout with shipping and payment
-- Customer accounts with order history and address management
-- Order transfer between accounts
+## 2. Directory Structure
 
-## Getting Started
-
-### Deploy with Medusa Cloud
-
-The fastest way to get started is deploying with [Medusa Cloud](https://cloud.medusajs.com):
-
-1. [Create a Medusa Cloud account](https://cloud.medusajs.com)
-2. Deploy this starter directly from your dashboard
-
-### Local Installation
-
-> **Prerequisites:
->
-> - [Node.js](https://nodejs.org/) v20+
-> - [PostgreSQL](https://www.postgresql.org/) v15+
-> - [pnpm](https://pnpm.io/) v10+
-
-1. Clone the repository and install dependencies:
-
-```bash
-git clone https://github.com/medusajs/dtc-starter.git
-cd dtc-starter
-pnpm install
+```text
+.
+├── apps/
+│   ├── backend/                           # Medusa v2 Commerce Engine (@dtc/backend)
+│   │   ├── medusa-config.ts               # Core config: DB URL, CORS, secrets, SSL, R2 S3 provider, Razorpay
+│   │   ├── .env                           # Backend environment variables
+│   │   └── src/
+│   │       ├── admin/                     # Custom admin routes & widgets (gallery, journal, trade, commissions, feedback)
+│   │       ├── api/                       # File-based API endpoints (store/* and admin/*)
+│   │       ├── modules/                   # Custom Medusa modules (gallery, journal, trade, commission, feedback, razorpay)
+│   │       ├── subscribers/               # Event subscribers (password-reset, razorpay recovery)
+│   │       └── workflows/                 # Business logic workflows and steps
+│   │
+│   └── storefront/                        # Customer-Facing Next.js Storefront (@dtc/storefront)
+│       ├── next.config.js                 # Next.js config (Turbopack root, aliases, CSP, R2 remote patterns)
+│       ├── .env.local                     # Storefront environment variables
+│       └── src/
+│           ├── app/                       # App Router routes (artworks, gallery, journal, checkout, account, commissions)
+│           ├── components/                # Modular gallery design system components
+│           └── lib/                       # Medusa JS SDK client, data caching, rate limiting, validation
+├── docs/                                  # Architecture, performance, and module specifications
+├── package.json                           # Turborepo root package.json (npm@11.1.0)
+├── package-lock.json                      # Authoritative lockfile
+└── turbo.json                             # Turborepo pipeline tasks
 ```
 
-2. Set up environment variables for the backend:
+---
+
+## 3. Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) v22+
+- [npm](https://www.npmjs.com/) v11+ (authoritative lockfile: `package-lock.json`)
+- Remote Supabase PostgreSQL (or local PostgreSQL v15+)
+- Cloudflare R2 bucket credentials
+- Razorpay test mode credentials
+
+> [!IMPORTANT]
+> The project strictly uses **`npm`**. Do not run `pnpm`, `yarn`, or `bun`.
+
+### 1. Install Dependencies
+
+From the repository root:
 
 ```bash
-cp apps/backend/.env.template apps/backend/.env
+npm install
 ```
 
-3. Set the database URL in `apps/backend.env`:
+### 2. Configure Backend Environment
+
+Copy the template:
 
 ```bash
-# Replace with actual database URL, make sure the database exists.
-DATABASE_URL=postgres://postgres:@localhost:5432/medusa-dtc-starter
+cp apps/backend/.env.example apps/backend/.env
 ```
 
-4. Run migrations:
+Configure the following key variables in `apps/backend/.env`:
+- `DATABASE_URL`: Supabase PostgreSQL pooled connection URL.
+- `JWT_SECRET` & `COOKIE_SECRET`: Application secrets (≥ 32 characters in production).
+- `STORE_CORS`, `ADMIN_CORS`, `AUTH_CORS`: Allowed origins (e.g. `http://localhost:8000,http://localhost:9000`).
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`: Razorpay credentials.
+- `R2_FILE_URL`, `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`: Cloudflare R2 credentials.
+- `RESEND_API_KEY`: Resend API key for transactional email dispatch.
 
-```bash
-cd apps/backend
-pnpm medusa db:migrate
-```
+### 3. Configure Storefront Environment
 
-5. Add admin user:
-
-```bash
-cd apps/backend
-pnpm medusa user -e admin@test.com -p supersecret
-```
-
-6. Start Medusa backend:
-
-```bash
-cd apps/backend
-pnpm dev
-```
-
-7. Open the admin dashboard at `localhost:9000/app` and log in. Retrieve your publishable API key at Settings > Publishable API key.
-
-8. Set up environment variables for the storefront:
+Copy the template:
 
 ```bash
 cp apps/storefront/.env.template apps/storefront/.env.local
 ```
 
-9. Update `apps/storefront/.env.local` with your Medusa publishable API key:
+Configure `apps/storefront/.env.local`:
+- `NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://localhost:9000`
+- `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY`: Retrieve from Medusa Admin (**Settings** → **Publishable API Keys**).
+- `NEXT_PUBLIC_DEFAULT_REGION=in` (India)
+- `NEXT_PUBLIC_BASE_URL=http://localhost:8000`
+- `NEXT_PUBLIC_RAZORPAY_KEY_ID`: Razorpay Public Key ID (e.g. `rzp_test_xxx`).
+- `R2_PUBLIC_HOSTNAME`: Cloudflare R2 public hostname for Next.js image optimization.
+- `REVALIDATE_SECRET`: Secret token for on-demand ISR revalidation.
+
+---
+
+## 4. Development Commands
+
+Run all commands from the repository root using `npm`:
 
 ```bash
-NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=pk_6c3...
+# Start both Backend and Storefront concurrently
+npm run dev
+
+# Start Backend only (http://localhost:9000, Admin at /app)
+npm run backend:dev
+
+# Start Storefront only (http://localhost:8000)
+npm run storefront:dev
+
+# Run linting across all workspaces
+npm run lint
+
+# Build production bundles
+npm run build
 ```
 
-10.  Start storefront:
+Database migrations (run from `apps/backend`):
 
 ```bash
-cd apps/storefront
-pnpm dev
+cd apps/backend
+npx medusa db:migrate
 ```
 
-The storefront runs on `http://localhost:8000`.
+---
 
-You can slo run the following command from the root to start both backend and storefront:
+## 5. Key Features & Modules
 
-```bash
-pnpm dev
-```
+- **Editorial Catalog & Visual Exhibition (`/artworks`, `/gallery`):** High-resolution contemporary art showcase, masonry gallery with fullscreen lightbox, and on-demand ISR caching (`revalidate = 60`).
+- **Razorpay Payment Integration (`/checkout`):** Custom payment module (`pp_razorpay_razorpay`) with INR currency enforcement at authorization, server-side HMAC verification, anti-replay guards, and abandoned cart recovery.
+- **Customer Accounts & Security (`/account`, `/login`, `/register`):** Customer profile management, session cookies (`_medusa_jwt`), and in-memory rate limiting on login and registration.
+- **Trade Program (`/trade`, `/app/trade-applications`):** B2B advisory and discount workflow for interior designers and architects with admin review.
+- **Bespoke Commissions (`/commissions`, `/app/commissions`):** Custom artwork request workflow with presigned Cloudflare R2 image uploads, discussion threads, and draft order conversion.
+- **Studio Journal (`/journal`, `/app/journal`):** Editorial articles, markdown content management, and SEO metadata.
+- **Feedback & Bug Reporting (`Footer` widget):** Direct customer feedback and screenshot submissions linked to the backend feedback module.
 
-## Configuration
+---
 
-The storefront is configured via environment variables in `apps/storefront/.env.local`:
+## 6. Storefront Configuration Reference
 
 | Variable | Description | Default |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | Publishable API key from your Medusa backend | — |
-| `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | URL of your Medusa backend | `http://localhost:9000` |
-| `NEXT_PUBLIC_DEFAULT_REGION` | Default region country code | `dk` |
-| `NEXT_PUBLIC_BASE_URL` | Base URL of the storefront | `https://localhost:8000` |
-| `NEXT_PUBLIC_STRIPE_KEY` | Stripe publishable key (optional) | — |
+|:---|:---|:---|
+| `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | Medusa backend API URL | `http://localhost:9000` |
+| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | Publishable key from Medusa Admin | — |
+| `NEXT_PUBLIC_DEFAULT_REGION` | Default ISO-2 country code for pricing | `in` |
+| `NEXT_PUBLIC_BASE_URL` | Base URL of storefront | `http://localhost:8000` |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Razorpay Public Key ID (modal checkout) | `rzp_test_xxx` |
+| `R2_PUBLIC_HOSTNAME` | Hostname for R2 media remotePatterns | — |
+| `REVALIDATE_SECRET` | Secret token for ISR `/api/revalidate` | — |
 
-## Resources
+---
 
-- [Medusa Documentation](https://docs.medusajs.com)
-- [Medusa Cloud](https://cloud.medusajs.com)
+## License
+
+Private / Proprietary — Livin In The Art. All rights reserved.

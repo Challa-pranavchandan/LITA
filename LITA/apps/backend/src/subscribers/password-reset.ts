@@ -1,5 +1,5 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 
 type PasswordResetData = {
   entity_id: string
@@ -26,10 +26,34 @@ export default async function passwordResetHandler({
   const fromEmail = process.env.RESEND_FROM_EMAIL || "LITA <onboarding@resend.dev>"
 
   if (!apiKey) {
+    if (process.env.NODE_ENV === "production") {
+      logger.error(
+        `[password-reset] RESEND_API_KEY is not configured in production. Cannot send password reset email to ${email}.`
+      )
+      return
+    }
     logger.warn(
       `[password-reset] RESEND_API_KEY is not configured. Reset link for ${email} (${actor_type}): ${resetUrl}`
     )
     return
+  }
+
+  try {
+    const notificationService: any = container.resolve(Modules.NOTIFICATION)
+    if (notificationService) {
+      await notificationService.createNotifications({
+        to: email,
+        channel: "email",
+        template: "password-reset",
+        data: { email, resetUrl },
+      })
+      logger.info(`[password-reset] Dispatched password reset notification for ${email}`)
+      return
+    }
+  } catch (err: any) {
+    logger.debug(
+      `[password-reset] Notification service resolution failed, using direct Resend call: ${err?.message}`
+    )
   }
 
   try {

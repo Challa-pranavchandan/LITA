@@ -176,6 +176,27 @@ export const updateCommissionConvertedStep = createStep(
       admin_notes: `Converted to Draft Order ${order_id}`,
     })
 
+    try {
+      const eventBus: any = container.resolve(Modules.EVENT_BUS)
+      if (eventBus) {
+        await eventBus.emit({
+          name: "commission.status_changed",
+          data: {
+            id: updated.id,
+            customer_id: updated.customer_id,
+            title: updated.title,
+            status: "converted",
+            previous_status: "accepted",
+            quoted_price: updated.quoted_price,
+            currency_code: updated.currency_code,
+            order_id,
+          },
+        })
+      }
+    } catch (err: any) {
+      console.warn(`[commissions] Failed to emit converted status event: ${err?.message}`)
+    }
+
     return new StepResponse(updated, { commission_id })
   },
   async (rollbackData, { container }) => {
