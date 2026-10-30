@@ -946,13 +946,13 @@ export function AccountDashboard({
                         {c.status}
                       </span>
                     </div>
-                    {c.artist_name && (
-                      <p className="text-xs text-[#666666] mt-0.5">Artist: {c.artist_name}</p>
+                    {c.title && (
+                      <p className="text-xs text-[#666666] mt-0.5">{c.title}</p>
                     )}
                   </div>
-                  {c.quote_amount ? (
+                  {c.quoted_price ? (
                     <span className="text-[14px] font-medium text-[#222222]">
-                      {formatMoney(c.quote_amount, c.currency_code || "USD")}
+                      {formatMoney(c.quoted_price, c.currency_code || "INR")}
                     </span>
                   ) : (
                     <span className="text-xs text-[#888888]">In review</span>

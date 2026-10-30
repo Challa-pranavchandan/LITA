@@ -46,30 +46,15 @@ const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname, "../../"),
   },
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      react: path.resolve(__dirname, "node_modules/react"),
-      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
-      "@": path.resolve(__dirname, "src"),
-      "@lib": path.resolve(__dirname, "src/lib"),
-      "@modules": path.resolve(__dirname, "src/modules"),
-      "@pages": path.resolve(__dirname, "src/pages"),
-    }
-    return config
-  },
+  transpilePackages: ["styled-jsx"],
+
   reactStrictMode: true,
   logging: {
     fetches: {
       fullUrl: true,
     },
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+
   images: {
     unoptimized: true,
     remotePatterns: [

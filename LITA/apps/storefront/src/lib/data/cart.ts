@@ -1,12 +1,14 @@
-"use server";
+"use server"
 
-import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import type { HttpTypes } from "@medusajs/types";
-import { sdk } from "@/lib/medusa";
-import { getRegion } from "@/lib/data/catalog";
-import { getAuthHeaders } from "@/lib/data/customer";
+import { cookies } from "next/headers"
+import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
+import type { HttpTypes } from "@medusajs/types"
+import { sdk } from "@/lib/medusa"
+import { getRegion } from "@/lib/data/catalog"
+import { getAuthHeaders } from "@/lib/data/customer"
+
+import { assertAllowedProvider, isRazorpayProvider } from "@/lib/payment-guard"
 
 const CART_COOKIE = "_cart_id";
 const CART_FIELDS =
@@ -21,8 +23,8 @@ function message(e: unknown): string {
 
 function isCartStaleOrNotFoundError(e: unknown): boolean {
   if (!e || typeof e !== "object") return false;
-  const msg = "message" in e ? String((e as any).message).toLowerCase() : "";
-  const status = "status" in e ? (e as any).status : undefined;
+  const msg = "message" in e ? String((e as { message?: unknown }).message).toLowerCase() : "";
+  const status = "status" in e ? (e as { status?: unknown }).status : undefined;
   return (
     status === 404 ||
     status === 400 ||
@@ -280,33 +282,46 @@ export async function listPaymentProviders(): Promise<
 }
 
 export async function startPayment(providerId: string): Promise<ActionResult> {
+  assertAllowedProvider(providerId)
 
-  const cart = await getCart();
-  if (!cart) return { ok: false, error: "Your bag is empty." };
+  const cart = await getCart()
+  if (!cart) return { ok: false, error: "Your bag is empty." }
   try {
     await sdk.store.payment.initiatePaymentSession(cart, {
       provider_id: providerId,
-    });
-    refresh();
-    return { ok: true };
+    })
+    refresh()
+    return { ok: true }
   } catch (e) {
     if (isCartNotFoundError(e)) {
-      await clearStaleCart();
-      refresh();
-      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+      await clearStaleCart()
+      refresh()
+      return { ok: false, error: "Your bag session expired. Please refresh the page." }
     }
-    return { ok: false, error: message(e) };
+    return { ok: false, error: message(e) }
   }
 }
 
 /**
  * Completes the cart. With Medusa's built-in manual provider (pp_system_default) this
- * places the order straight away. For Stripe or Razorpay, confirm the payment on the
- * client first, then call this.
+ * places the order straight away in dev. In production, only verified Razorpay payment
+ * sessions are allowed.
  */
 export async function placeOrder(): Promise<ActionResult> {
   const id = await cartId();
   if (!id) return { ok: false, error: "Your bag is empty." };
+
+  if (process.env.NODE_ENV === "production") {
+    const cart = await getCart();
+    const activeSessions = cart?.payment_collection?.payment_sessions ?? [];
+    const hasRazorpay = activeSessions.some((s) => isRazorpayProvider(s.provider_id));
+    if (!hasRazorpay) {
+      throw new Error(
+        "Payment provider is not allowed in production. Only Razorpay is accepted."
+      );
+    }
+  }
+
   let orderId: string | undefined;
   try {
     const res = await sdk.store.cart.complete(id);
@@ -361,8 +376,8 @@ export async function attachCustomerToCart(): Promise<void> {
 }
 
 export async function updateRegion(
-  countryCode: string,
-  currentPath: string
+  _countryCode: string,
+  _currentPath: string
 ): Promise<void> {
   const id = await cartId();
   if (id) {
@@ -415,21 +430,22 @@ export async function setShippingMethod({
 export async function initiatePaymentSession(
   cart: HttpTypes.StoreCart,
   data: {
-    provider_id: string;
-    context?: Record<string, unknown>;
-    data?: Record<string, unknown>;
+    provider_id: string
+    context?: Record<string, unknown>
+    data?: Record<string, unknown>
   }
 ): Promise<HttpTypes.StorePaymentCollection> {
-  const sessionData = data.data ?? data.context;
+  assertAllowedProvider(data.provider_id)
+  const sessionData = data.data ?? data.context
   const { payment_collection } = await sdk.store.payment.initiatePaymentSession(
     cart,
     {
       provider_id: data.provider_id,
       ...(sessionData ? { data: sessionData } : {}),
     }
-  );
-  refresh();
-  return payment_collection;
+  )
+  refresh()
+  return payment_collection
 }
 
 export async function applyPromotions(codes: string[]): Promise<ActionResult> {

@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { sdk } from "@/lib/medusa";
 import { getAuthHeaders } from "@/lib/data/customer";
 
+function getErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
 export type CommissionImage = {
   key: string;
   filename: string;
@@ -70,10 +74,10 @@ export async function getCommissionUploadUrl(
     );
 
     return { ok: true, url: res.url, key: res.key };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       ok: false,
-      error: err?.message || "Failed to generate image upload URL.",
+      error: getErrorMessage(err, "Failed to generate image upload URL."),
     };
   }
 }
@@ -109,10 +113,10 @@ export async function createCommissionRequest(payload: {
     revalidatePath("/account");
     revalidatePath("/commissions");
     return { ok: true, commission: res.commission };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       ok: false,
-      error: err?.message || "Failed to submit commission request.",
+      error: getErrorMessage(err, "Failed to submit commission request."),
     };
   }
 }
@@ -135,8 +139,8 @@ export async function getCustomerCommissions(): Promise<Commission[]> {
     });
 
     return res.commissions || [];
-  } catch (err: any) {
-    console.error("[medusa] Failed to fetch customer commissions:", err?.message);
+  } catch (err: unknown) {
+    console.error("[medusa] Failed to fetch customer commissions:", getErrorMessage(err, ""));
     return [];
   }
 }
@@ -161,8 +165,8 @@ export async function getCustomerCommission(
     });
 
     return res;
-  } catch (err: any) {
-    console.error("[medusa] Failed to fetch commission detail:", err?.message);
+  } catch (err: unknown) {
+    console.error("[medusa] Failed to fetch commission detail:", getErrorMessage(err, ""));
     return null;
   }
 }
@@ -189,10 +193,10 @@ export async function acceptCommissionQuote(
 
     revalidatePath("/account");
     return { ok: true, commission: res.commission };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       ok: false,
-      error: err?.message || "Failed to accept commission quote.",
+      error: getErrorMessage(err, "Failed to accept commission quote."),
     };
   }
 }
@@ -221,10 +225,10 @@ export async function sendCommissionMessage(
 
     revalidatePath("/account");
     return { ok: true, message: res.message };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       ok: false,
-      error: err?.message || "Failed to send message.",
+      error: getErrorMessage(err, "Failed to send message."),
     };
   }
 }

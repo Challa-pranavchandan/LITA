@@ -32,6 +32,8 @@ export function ResetPasswordForm({ token }: { token?: string }) {
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!token) return;
+    const validToken = token;
     const f = new FormData(e.currentTarget);
     const password = String(f.get("password") ?? "");
     const confirmPassword = String(f.get("confirm_password") ?? "");
@@ -49,7 +51,7 @@ export function ResetPasswordForm({ token }: { token?: string }) {
     }
 
     startTransition(async () => {
-      const res = await resetPassword(token, password);
+      const res = await resetPassword(validToken, password);
       if (!res.ok) {
         setError(res.error || "Unable to reset password.");
         return;

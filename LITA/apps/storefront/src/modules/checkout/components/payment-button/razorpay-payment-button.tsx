@@ -38,9 +38,20 @@ export interface RazorpayOptions {
   }
 }
 
+export interface RazorpayPaymentFailedResponse {
+  error?: {
+    code?: string
+    description?: string
+    source?: string
+    step?: string
+    reason?: string
+    metadata?: Record<string, unknown>
+  }
+}
+
 export interface RazorpayInstance {
   open: () => void
-  on: (event: string, callback: (response: any) => void) => void
+  on: (event: string, callback: (response: RazorpayPaymentFailedResponse | unknown) => void) => void
   close: () => void
 }
 
@@ -189,10 +200,12 @@ export const RazorpayPaymentButton = ({
               )
               setSubmitting(false)
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             // In Next.js, redirect() throws an error with NEXT_REDIRECT digest.
             // Do not catch it as a payment failure.
-            if (err?.digest?.startsWith?.("NEXT_REDIRECT") || err?.message === "NEXT_REDIRECT") {
+            const digest = err && typeof err === "object" && "digest" in err ? String((err as { digest?: unknown }).digest) : ""
+            const msg = err instanceof Error ? err.message : ""
+            if (digest.startsWith("NEXT_REDIRECT") || msg === "NEXT_REDIRECT") {
               throw err
             }
             setErrorMessage(
@@ -211,18 +224,20 @@ export const RazorpayPaymentButton = ({
 
       const rzp = new window.Razorpay(options)
 
-      rzp.on("payment.failed", (res: any) => {
+      rzp.on("payment.failed", (res: RazorpayPaymentFailedResponse | unknown) => {
+        const errObj = res && typeof res === "object" && "error" in res ? (res as RazorpayPaymentFailedResponse).error : undefined
         const desc =
-          res?.error?.description ||
-          res?.error?.reason ||
+          errObj?.description ||
+          errObj?.reason ||
           "Payment failed. Please choose another payment method or try again."
         setErrorMessage(desc)
         setSubmitting(false)
       })
 
       rzp.open()
-    } catch (err: any) {
-      setErrorMessage(err.message || "An unexpected error occurred while launching Razorpay.")
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred while launching Razorpay."
+      setErrorMessage(msg)
       setSubmitting(false)
     }
   }

@@ -12,6 +12,8 @@ import {
   SearchIcon,
 } from "@/components/livinIcons";
 
+import { HttpTypes } from "@medusajs/types";
+
 type CategoryItem = { name: string; handle: string };
 type CollectionItem = { title: string; handle: string };
 
@@ -22,7 +24,7 @@ export function MobileMenu({
 }: {
   categories?: CategoryItem[];
   collections?: CollectionItem[];
-  customer?: any;
+  customer?: HttpTypes.StoreCustomer | null;
 }) {
   const [open, setOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);

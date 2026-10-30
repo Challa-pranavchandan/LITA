@@ -182,3 +182,21 @@ npm run test:unit -- src/modules/razorpay/__tests__/razorpay-provider.unit.spec.
   - Return / Refund Policy
   - Contact Us page with business details
 - [ ] Perform a small live test payment (e.g. ₹1) and process a refund from Medusa Admin.
+
+---
+
+## 9. Production Checklist: Regions & Payment Providers
+
+> [!IMPORTANT]
+> **Production Region & Payment Configuration**
+> In **Medusa Admin** > **Settings** > **Regions**:
+> - The **India** region (`in`) must list **only** the Razorpay provider (`pp_razorpay_razorpay`). The manual payment provider (`pp_system_default`) must be removed from all active regions.
+> - The currency must be strictly **INR** (`₹`).
+> - No EUR/USD demo region may exist in the database.
+>
+> Run the backend validation script before deployment:
+> ```bash
+> cd apps/backend
+> npm run check:prod-config
+> ```
+> This script exits non-zero if any non-Razorpay provider or non-INR currency is configured on any region.

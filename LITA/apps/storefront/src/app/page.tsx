@@ -1,8 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { siteConfig } from "@/lib/config";
-import { listArtworks, listCollections, CURATED_COLLECTIONS } from "@/lib/data/catalog";
-import { ArtworkGrid } from "@/components/ArtworkGrid";
+import { listArtworks, CURATED_COLLECTIONS } from "@/lib/data/catalog";
 import { RecentlyAddedSection } from "@/components/RecentlyAddedSection";
 
 
@@ -60,10 +58,7 @@ const STUDIO_SERVICES = [
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const [{ products }, collections] = await Promise.all([
-    listArtworks({}),
-    listCollections(),
-  ]);
+  const { products } = await listArtworks({});
 
   const recent = products.slice(0, 9);
 

@@ -57,6 +57,8 @@ function getItemSize(item: HttpTypes.StoreCartLineItem): string {
   const iMeta = (item.metadata ?? {}) as Record<string, unknown>;
   const vMeta = (item.variant?.metadata ?? {}) as Record<string, unknown>;
 
+  if (typeof vMeta.dimensions === "string" && vMeta.dimensions) return vMeta.dimensions;
+  if (typeof vMeta.size === "string" && vMeta.size) return vMeta.size;
   if (typeof pMeta.dimensions === "string" && pMeta.dimensions) return pMeta.dimensions;
   if (typeof pMeta.size === "string" && pMeta.size) return pMeta.size;
   if (typeof iMeta.dimensions === "string" && iMeta.dimensions) return iMeta.dimensions;

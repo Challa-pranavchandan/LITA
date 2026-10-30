@@ -86,11 +86,12 @@ export function CommissionRequestForm({
           item.id === tempId ? { ...item, status: "done", key: urlRes.key } : item
         )
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Upload failed.";
       setUploads((prev) =>
         prev.map((item) =>
           item.id === tempId
-            ? { ...item, status: "error", error: err?.message || "Upload failed." }
+            ? { ...item, status: "error", error: errMsg }
             : item
         )
       );

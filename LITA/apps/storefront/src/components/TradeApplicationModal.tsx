@@ -82,10 +82,10 @@ export function TradeApplicationModal({ isOpen, onClose, initialRole }: TradeMod
       });
       setStatus("success");
       form.reset();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus("error");
       setErrorMessage(
-        err?.message || "Unable to submit application. Please check your information and try again."
+        err instanceof Error ? err.message : "Unable to submit application. Please check your information and try again."
       );
     }
   }

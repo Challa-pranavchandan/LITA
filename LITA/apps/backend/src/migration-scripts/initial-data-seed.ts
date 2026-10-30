@@ -26,14 +26,26 @@ import {
 export default async function initial_data_seed({
   container,
 }: {
-  container: MedusaContainer;
+  container: MedusaContainer
 }) {
-  const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
-  const link = container.resolve(ContainerRegistrationKeys.LINK);
-  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
+
+  if (process.env.SEED_DEMO_DATA !== "true") {
+    logger.info(
+      "Skipping demo seed: SEED_DEMO_DATA is not set to \"true\". " +
+      "This script seeds a Europe/EUR demo region and Medusa demo products " +
+      "which are not appropriate for a production LITA database. " +
+      "Set SEED_DEMO_DATA=true only in a local development environment."
+    )
+    return
+  }
+
+  const link = container.resolve(ContainerRegistrationKeys.LINK)
+  const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const fulfillmentModuleService = container.resolve(
     ModuleRegistrationName.FULFILLMENT
-  );
+  )
+
 
   const countries = ["gb", "de", "dk", "se", "fr", "es", "it"];
 

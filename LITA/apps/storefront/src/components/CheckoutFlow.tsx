@@ -12,17 +12,19 @@ import {
   type AddressInput,
 } from "@/lib/data/cart";
 import { isRazorpay } from "@/lib/constants";
+import { isSupportedProvider } from "@/lib/payment-guard";
 import RazorpayPaymentButton from "@/modules/checkout/components/payment-button/razorpay-payment-button";
 
 type Step = "address" | "shipping" | "payment";
 
-const isSupportedProvider = (id: string) =>
-  id === "pp_system_default" || isRazorpay(id);
+const IS_PRODUCTION = process.env.NODE_ENV === "production"
 
 function providerLabel(id: string) {
-  if (id === "pp_system_default") return "Manual Payment (Pay Offline / Test)";
-  if (isRazorpay(id)) return "UPI / Cards / Netbanking (Razorpay)";
-  return id.replace(/^pp_/, "").replace(/_/g, " ");
+  if (isRazorpay(id)) return "UPI / Cards / Netbanking (Razorpay)"
+  if (id === "pp_system_default" && !IS_PRODUCTION) {
+    return "Manual Payment (Pay Offline / Test)"
+  }
+  return id.replace(/^pp_/, "").replace(/_/g, " ")
 }
 
 
@@ -197,7 +199,7 @@ export function CheckoutFlow({
           <h2 className="text-xl">Payment</h2>
           {usable.length === 0 ? (
             <p role="alert" className="border border-dust bg-wall p-4">
-              Payment isn't switched on for this store yet. The store owner needs to enable a payment provider for this region in the Medusa admin.
+              Payment isn&apos;t switched on for this store yet. The store owner needs to enable a payment provider for this region in the Medusa admin.
             </p>
           ) : (
             <fieldset className="space-y-2">
@@ -211,16 +213,20 @@ export function CheckoutFlow({
             </fieldset>
           )}
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-          {isRazorpay(providerId) ? (
-            <div className="pt-2">
-              <RazorpayPaymentButton cart={cart} notReady={pending || !providerId} />
-            </div>
-          ) : (
-            <button type="button" onClick={submitOrder} disabled={pending || !providerId} className="btn-solid w-full sm:w-auto">
-              {pending ? "Placing order…" : `Place order · ${formatMoney(cart.total, currency)}`}
-            </button>
+          {usable.length > 0 && (
+            <>
+              {isRazorpay(providerId) ? (
+                <div className="pt-2">
+                  <RazorpayPaymentButton cart={cart} notReady={pending || !providerId} />
+                </div>
+              ) : !IS_PRODUCTION ? (
+                <button type="button" onClick={submitOrder} disabled={pending || !providerId} className="btn-solid w-full sm:w-auto">
+                  {pending ? "Placing order…" : `Place order · ${formatMoney(cart.total, currency)}`}
+                </button>
+              ) : null}
+              <p className="text-sm text-graphite">By placing the order you agree to the <a href="/shipping" className="link">shipping and returns policy</a>.</p>
+            </>
           )}
-          <p className="text-sm text-graphite">By placing the order you agree to the <a href="/shipping" className="link">shipping and returns policy</a>.</p>
         </div>
       )}
     </div>

@@ -103,7 +103,7 @@ export default async function ArtworkPage({ params }: Props) {
             {variants.length > 0 ? (
               <AddToCart variants={variants} />
             ) : (
-              <p className="text-graphite">This work isn't available to order right now.</p>
+              <p className="text-graphite">This work isn&apos;t available to order right now.</p>
             )}
             <div className="mt-2 flex items-center gap-6">
               <SaveButton productId={product.id} title={product.title} withLabel />

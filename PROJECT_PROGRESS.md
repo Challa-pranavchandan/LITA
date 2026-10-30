@@ -1,6 +1,6 @@
 # LITA — Project Status & Context Guide for Claude
 
-> **Last audited:** 30 Oct 2026 (full file-by-file review of branch `feature/razorpay-payment`).
+> **Last audited:** 30 Oct 2026. Updated with CP0 (clean baseline) and CP3 (notification emails) completion.
 > Sections 1-5 are the preserved history. **Section 6 onward is rewritten** with the production-readiness audit, checkpoints and the master TODO list.
 
 > **Instructions for Claude / AI Assistant:**
@@ -346,7 +346,32 @@
     - **Files Created:** `components/intro/IntroProvider.tsx`, `components/intro/IntroLoader.tsx`, `components/layout/Navbar.tsx`, `hooks/useIntroReady.ts`.
     - **Failsafe & Edge Cases:** 2.5s failsafe timer, fallback DOM query (`document.getElementById("nav-logo")`), reduced motion respect (`prefers-reduced-motion: reduce`), and `?intro=1` / `?replay=1` URL query parameter for manual replaying.
 
----
+24. **Medusa v2 Notification Module and Transactional Emails — Resend Provider (CP3):**
+    - **Notification Module Integration:** Registered `@medusajs/medusa/notification` in `apps/backend/medusa-config.ts` backed by a custom Resend notification provider module at `apps/backend/src/modules/resend/` (service + channel `email`). The provider calls the Resend REST API; falls back to console logging in local dev when `RESEND_API_KEY` is absent.
+    - **Order Confirmation Email (`order.placed`):** Subscriber at `apps/backend/src/subscribers/order-placed.ts` sends an editorial Cormorant Garamond branded order summary (item list, INR totals, shipping address) to the customer email on every `order.placed` event.
+    - **Shipment Dispatch Email (`order.fulfillment_created`):** Subscriber at `apps/backend/src/subscribers/order-fulfillment-created.ts` sends a branded dispatch notification with fulfillment tracking details.
+    - **Trade Application Status Email (`trade_application.status_changed`):** Subscriber at `apps/backend/src/subscribers/trade-application-status-changed.ts` sends approval / rejection emails reflecting the reviewer's decision.
+    - **Commission Status Email (`commission.status_changed`):** Subscriber at `apps/backend/src/subscribers/commission-status-changed.ts` notifies customers on each lifecycle transition (quoted, accepted, converted).
+    - **Hardened Logging:** `password-reset.ts` and all new subscribers never log sensitive tokens or reset links when `NODE_ENV === "production"`.
+    - **Automated Tests:** Unit test suites added under `apps/backend/src/modules/resend/__tests__` and `apps/backend/src/subscribers/__tests__`.
+
+25. **CP0 — Clean Build Baseline (Fresh-Clone Verification):**
+    - **Single Lockfile:** Deleted `apps/storefront/package-lock.json` (package name `art-store`); the root `package-lock.json` is now the sole authoritative lockfile for all npm workspaces.
+    - **Build Safety Restored:** Removed `typescript.ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true` from `apps/storefront/next.config.js`.
+    - **Dead-Code Removal:** Deleted the entire `[countryCode]` App Router tree, `/api/payment-return`, Stripe/PayPal payment provider icons, Medusa onboarding widgets and `lib/data/onboarding.ts`, custom backend stubs, and the unreachable `react-instantsearch` / `instantsearch.js` / `@medusajs/instantsearch-adapter` search stack along with unused `src/modules/`, `src/types/`, and `src/styles/` starter directories.
+    - **Dependency Hygiene:** Declared previously missing packages (`clsx`, `@medusajs/icons`, `styled-jsx`, `eslint`, `eslint-config-next`) directly in `apps/storefront/package.json`. Removed `ansi-colors` usage from `check-env-variables.js` (replaced with plain `console` output).
+    - **Scripts Added:** Added `lint`, `typecheck`, and `test` scripts to `apps/storefront/package.json`; updated `turbo.json` pipeline with task definitions and `.medusa/**` build outputs.
+    - **Global Error Boundary:** Added `apps/storefront/src/app/global-error.tsx` for the App Router, resolving the Next.js fallback-page `useContext` null prerender error caused by a `styled-jsx` / React 19 version conflict.
+    - **Backend Workflow Typing:** Fixed `StepResponse` generic types in `apps/backend/src/workflows/reconcile-razorpay-order.ts` and corrected `createServiceZones` argument structure in `apps/backend/src/scripts/seed-india-shipping.ts`.
+    - **Exit Test Passed:** `npm ci && npm run lint && npm run test && npm run build` all complete successfully with zero ignored errors from a clean clone.
+
+26. **B1 — Removal of Manual Payment Path (Branch `b1-remove-manual-payment`):**
+    - **Storefront Checkout Flow:** Updated `isSupportedProvider` and `providerLabel` in `apps/storefront/src/components/CheckoutFlow.tsx` to strictly restrict `pp_system_default` to non-production environments (`process.env.NODE_ENV !== "production"`). Hides the `"Manual Payment (Pay Offline / Test)"` label and generic `"Place order"` button in production, cleanly displaying the *"Payment isn't switched on..."* notice when no supported provider is enabled.
+    - **Server-Side Action & Data Guards:** Created centralized `apps/storefront/src/lib/payment-guard.ts` module with `isRazorpayProvider`, `isSupportedProvider`, and `assertAllowedProvider`. Integrated server-side assertion into `startPayment`, `initiatePaymentSession`, and `placeOrder` in `apps/storefront/src/lib/data/cart.ts` so clients cannot bypass the UI guard. Gated `pp_system_default` in `paymentInfoMap` in `constants.tsx`.
+    - **Backend Configuration Safety Script:** Created `apps/backend/src/scripts/check-production-config.ts` (runnable via `npm run check:prod-config`), inspecting all database regions via Medusa Query Graph API and enforcing strictly INR currency and `pp_razorpay_razorpay` provider only, exiting with code 1 if demo regions or unauthorized payment providers exist.
+    - **Seed Script Guard:** Verified `apps/backend/src/migration-scripts/initial-data-seed.ts` is guarded with `SEED_DEMO_DATA=true` so EU/EUR demo data and `pp_system_default` never seed against a production database.
+    - **Documentation:** Added Section 9 *"Production Checklist: Regions & Payment Providers"* to `docs/razorpay.md`.
+    - **Automated Tests:** Created unit test suite in `apps/storefront/src/__tests__/payment-guard.test.js` validating all production and non-production provider acceptance/rejection scenarios (25 tests passing).
 
 ---
 
@@ -362,14 +387,14 @@ Status legend: `BLOCKER` = must fix before taking real money. `SHOULD` = fix bef
 
 | Area | Status | Summary |
 | :--- | :--- | :--- |
-| Catalog, cart, browsing, ISR | DONE (needs hardening) | Works; dead Stripe-starter code and dual route tree still present |
+| Catalog, cart, browsing, ISR | DONE (needs hardening) | Works; dead starter code deleted (CP0) |
 | Razorpay payments | BLOCKER | Strong core; manual-payment path, refund no-op, go-live steps and CSP still open |
 | Auth & accounts | SHOULD | Works; rate limiting is in-memory only; magic link not built |
 | Commissions / Trade / Feedback | BLOCKER | Trade lookup leaks PII by email; commission-to-payment path undefined |
-| Email & notifications | BLOCKER | Only password reset exists; no order/shipping/trade/inquiry emails |
+| Email & notifications | DONE (CP3) | Notification module + Resend provider live; order, trade, commission emails sent; studio inbox, newsletter and domain SPF/DKIM pending |
 | Security & edge | BLOCKER | Revalidate auth bypass, CSP report-only, no WAF/rate limits |
 | Infrastructure & ops | BLOCKER | No Redis modules, no Docker/CI, no monitoring, no backup plan, wrong DB region |
-| Build quality & tests | BLOCKER | Build errors suppressed, undeclared dependencies, tiny test coverage |
+| Build quality & tests | DONE (CP0) | Single lockfile, all imports declared, build/lint/test pass with zero ignored errors |
 | Legal, tax, content | BLOCKER | Privacy page names another brand, no GST setup, thin policies |
 | SEO & performance | SHOULD | No sitemap/robots wiring, 12 MB unoptimized public images, optimization disabled |
 
@@ -377,9 +402,13 @@ Status legend: `BLOCKER` = must fix before taking real money. `SHOULD` = fix bef
 
 ### 6.2 BLOCKERS - fix before any real customer pays
 
-**B1. Manual payment can bypass Razorpay.**
-`apps/storefront/src/components/CheckoutFlow.tsx` treats `pp_system_default` as a supported provider and labels it "Manual Payment (Pay Offline / Test)". `apps/backend/src/migration-scripts/initial-data-seed.ts` creates a Europe/EUR region with `pp_system_default`. If any live region still has that provider, a buyer can place an order without paying.
-Fix: remove `pp_system_default` from every live region in Admin; gate it in `isSupportedProvider` behind `NODE_ENV !== "production"`; confirm the India region lists only `pp_razorpay_razorpay`. Also delete the Europe/EUR demo region if it exists in your database.
+**B1. Manual payment can bypass Razorpay. (RESOLVED)**
+Resolved across storefront UI, Server Actions, backend configuration scripts, and documentation:
+- Storefront UI: `isSupportedProvider` and `providerLabel` in `CheckoutFlow.tsx` allow `pp_system_default` only when `process.env.NODE_ENV !== "production"`. Razorpay is always accepted. In production, manual payment labels and generic place order buttons are omitted.
+- Server Actions & Cart: `apps/storefront/src/lib/payment-guard.ts` provides `assertAllowedProvider` and `isRazorpayProvider`. Server actions (`startPayment`, `initiatePaymentSession`, `placeOrder`) reject non-Razorpay providers in production before calling Medusa.
+- Backend Safety Script: `apps/backend/src/scripts/check-production-config.ts` (runnable via `npm run check:prod-config`) inspects all regions via Medusa Query Graph API, asserting currency is `inr` and payment provider is `pp_razorpay_razorpay` only, exiting code 1 on violation.
+- Seed Guard: `initial-data-seed.ts` is guarded behind `SEED_DEMO_DATA=true`.
+- Documentation: Added Section 9 to `docs/razorpay.md`. Verified with 25 passing unit tests.
 
 **B2. Revalidate endpoint can be called without a secret.**
 `apps/storefront/src/app/api/revalidate/route.ts` compares `secret !== process.env.REVALIDATE_SECRET`. If the env var is unset and the request sends no secret, `undefined !== undefined` is false, so the request is accepted. The GET variant also puts the secret in the URL (ends up in logs). `.env.example` ships a real-looking value (`lita_gallery_revalidate_secret_2026`), and the backend `.env.example` does not list `REVALIDATE_SECRET` at all.
@@ -405,9 +434,16 @@ Hardened `password-reset.ts` and the Resend provider to never log reset links or
 `apps/storefront/src/app/api/inquiry/route.ts` only logs to the server console when `INQUIRY_WEBHOOK_URL` is unset, and still returns success. The newsletter form posts to the same route, so signups go nowhere. No rate limit, honeypot or captcha.
 Fix: send through Resend (studio inbox) and store in the backend, add Turnstile/hCaptcha plus distributed rate limiting, connect newsletter to a real provider.
 
-**B7. Build safety is switched off and dependencies are undeclared.**
-`next.config.js` sets `typescript.ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true`. Storefront code imports packages that are not in `apps/storefront/package.json` and not in either lockfile: `@headlessui/react`, `react-instantsearch`, `instantsearch.js`, `@medusajs/instantsearch-adapter`, `@stripe/stripe-js`, `@stripe/react-stripe-js`, and `check-env-variables.js` requires `ansi-colors` (also missing). Some others (`clsx`, `lodash`, `@radix-ui/react-slider`, `react-country-flag`, `@medusajs/icons`) only resolve through root hoisting. A clean `npm ci && npm run build` is likely to fail or behave differently from your machine. There are also two lockfiles (root and `apps/storefront/package-lock.json`, whose package name is `art-store`).
-Fix: delete the Stripe/search code you do not use (or add the packages), declare every import, remove the storefront lockfile, turn both ignore flags off and fix the errors, add `lint`, `typecheck` and `test` scripts, and prove a clean install builds in CI.
+**B7. Build safety is switched off and dependencies are undeclared. (RESOLVED — CP0)**
+All items in the original blocker have been closed:
+- Deleted `apps/storefront/package-lock.json` (the `art-store` lockfile); the single root `package-lock.json` is now authoritative.
+- Removed `typescript.ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true` from `apps/storefront/next.config.js`.
+- Deleted all unreachable and starter code: `[countryCode]` App Router tree, `/api/payment-return`, custom backend stubs, payment provider icons (Stripe, PayPal), onboarding scripts and widgets, unused storefront modules and templates, and the `react-instantsearch` / `instantsearch.js` / `@medusajs/instantsearch-adapter` search stack.
+- Declared previously missing packages (`clsx`, `@medusajs/icons`, `styled-jsx`, `eslint`, `eslint-config-next`) in `apps/storefront/package.json`.
+- Replaced `ansi-colors` in `check-env-variables.js` with plain `console` output.
+- Added `lint`, `typecheck`, and `test` scripts to `apps/storefront/package.json`; wired them into `turbo.json`.
+- Fixed every remaining TypeScript and ESLint error; added `apps/storefront/src/app/global-error.tsx` to silence the App Router prerender `useContext` null error caused by a `styled-jsx`/React 19 version mismatch.
+- Exit test confirmed: `npm ci && npm run lint && npm run test && npm run build` all pass with zero ignored errors from a fresh clone.
 
 **B8. Razorpay go-live and hardening.**
 Already built well (HMAC, API re-verification of amount/currency/order, replay check, webhook recovery). Still open:
@@ -510,19 +546,23 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] Razorpay provider with HMAC, API re-verification, replay check, webhook recovery workflow, 40 unit tests
 - [x] Intro animation, About page redesign, performance caching (ISR + in-memory TTL)
 - [x] Fail-closed Razorpay credentials in `medusa-config.ts`
+- [x] **CP0 — Clean build baseline:** single lockfile, all imports declared, dead starter code deleted, `lint`/`typecheck`/`test` scripts wired, build/lint/test pass with zero ignored errors (section 5 item 25)
+- [x] **CP3 — Transactional emails:** Notification module + custom Resend provider, order placed and fulfilled emails, trade and commission status emails, hardened production logging (section 5 item 24)
+- [x] **B1 — Remove manual payment path:** Storefront UI + server-side action guards, check:prod-config backend validation script, SEED_DEMO_DATA guard, 25 unit tests passed (section 5 item 26)
 
-### CP0 - Clean baseline
-- [ ] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
-- [ ] Declare or delete every undeclared import (`@headlessui/react`, `react-instantsearch`, `instantsearch.js`, `@medusajs/instantsearch-adapter`, `@stripe/*`, `ansi-colors`, plus hoisted ones)
-- [ ] Turn off `ignoreBuildErrors` and `ignoreDuringBuilds`, fix all errors
-- [ ] Add `lint`, `typecheck`, `test` scripts to the storefront; wire storefront node tests
-- [ ] Delete dead starter code (S4) and stub routes
-- [ ] Decide search: wire Meilisearch with INR only or remove it (S5)
-- [ ] India-only cleanup (S15): default region `in` in all env files, India seed instead of Europe seed, remove `[countryCode]` tree and country/language selectors
-- [ ] Merge `.env.template` and `.env.example` into one tracked file per app
+### CP0 - Clean baseline (COMPLETE — exit test passed)
+- [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
+- [x] Declare or delete every undeclared import (`@headlessui/react`, `react-instantsearch`, `instantsearch.js`, `@medusajs/instantsearch-adapter`, `@stripe/*`, `ansi-colors`, plus hoisted ones)
+- [x] Turn off `ignoreBuildErrors` and `ignoreDuringBuilds`, fix all errors
+- [x] Add `lint`, `typecheck`, `test` scripts to the storefront; wire storefront node tests
+- [x] Delete dead starter code (S4): `[countryCode]` route tree, payment-return, onboarding widgets, Stripe/PayPal icons, search stack
+- [x] Search decision (S5): removed `react-instantsearch` / `instantsearch.js` / `@medusajs/instantsearch-adapter` (not wired, not INR-aware)
+- [x] India-only cleanup (S15, partial): `[countryCode]` route tree deleted; `NEXT_PUBLIC_DEFAULT_REGION` set to `in` in storefront `.env.example`
+- [ ] India seed instead of Europe seed in `initial-data-seed.ts` (S15 — still open)
+- [ ] Merge `.env.template` and `.env.example` into one tracked file per app (S14 — still open)
 
 ### CP1 - Security fixes
-- [ ] Remove/gate `pp_system_default` (B1)
+- [x] Remove/gate `pp_system_default` (B1)
 - [ ] Fix revalidate auth, drop GET, rotate secret, add to backend env (B2)
 - [ ] Require auth on trade lookup and filter in query (B3)
 - [ ] Strip `webhook_verified` and client `razorpay_order_id` from client data (B8)
@@ -542,12 +582,14 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Decide commission payment path (payment link or cart) and build it (B10)
 - [ ] Add Razorpay hosts to CSP and test in report-only first (S1)
 
-### CP3 - Email and notifications
-- [ ] Medusa Notification module + Resend provider
-- [ ] Order placed, shipped, canceled, refunded emails
-- [ ] Trade application received / approved / rejected emails
-- [ ] Commission request received / quoted / converted emails
-- [ ] Studio inbox notification for contact, inquiry, feedback, trade
+### CP3 - Email and notifications (PARTIALLY COMPLETE — see B5)
+- [x] Medusa Notification module + custom Resend provider (`apps/backend/src/modules/resend/`)
+- [x] Order placed email (`order.placed` subscriber)
+- [x] Order fulfilled / shipped email (`order.fulfillment_created` subscriber)
+- [x] Trade application status emails (approved / rejected via `trade_application.status_changed`)
+- [x] Commission status emails (quoted / accepted / converted via `commission.status_changed`)
+- [ ] Order canceled and refunded emails (no `order.canceled` / `refund.processed` subscribers yet)
+- [ ] Studio inbox notification for contact form, inquiry form, feedback widget, and new trade applications
 - [ ] Newsletter provider and double opt-in
 - [ ] Verify sending domain, SPF, DKIM, DMARC
 

@@ -18,7 +18,7 @@ export default function ShippingPage() {
         </section>
         <section>
           <h2 className="mb-2 font-sans text-xl">Damaged in transit</h2>
-          <p>Explain how to report damage and what you'll do about it.</p>
+          <p>Explain how to report damage and what you&apos;ll do about it.</p>
         </section>
       </div>
     </div>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { listCategories, listCollections } from "@/lib/data/catalog";
 import { getCart } from "@/lib/data/cart";

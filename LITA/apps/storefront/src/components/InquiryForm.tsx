@@ -44,7 +44,7 @@ export function InquiryForm({
     return (
       <div role="status" className="border border-dust bg-wall p-6">
         <p className="text-lg">Thank you, your message is in.</p>
-        <p className="mt-1 text-graphite">You'll get a reply by email within two working days.</p>
+        <p className="mt-1 text-graphite">You&apos;ll get a reply by email within two working days.</p>
       </div>
     );
   }

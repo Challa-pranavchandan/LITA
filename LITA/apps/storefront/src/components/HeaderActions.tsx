@@ -12,14 +12,15 @@ import {
 import { CartDrawer } from "@/components/CartDrawer";
 import { useSaved } from "@/lib/saved";
 import { clearStaleCart } from "@/lib/data/cart";
+import { HttpTypes } from "@medusajs/types";
 
 export function HeaderActions({
   cart,
   customer,
   hasStaleCart,
 }: {
-  cart: any;
-  customer: any;
+  cart: HttpTypes.StoreCart | null;
+  customer: HttpTypes.StoreCustomer | null;
   hasStaleCart?: boolean;
 }) {
   const router = useRouter();

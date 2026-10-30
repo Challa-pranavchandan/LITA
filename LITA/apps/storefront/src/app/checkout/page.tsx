@@ -51,8 +51,8 @@ export default async function CheckoutPage() {
           shippingOptions={shippingOptions}
           providers={providers}
           customerEmail={customer?.email}
-          customerFirstName={customer?.first_name}
-          customerLastName={customer?.last_name}
+          customerFirstName={customer?.first_name ?? undefined}
+          customerLastName={customer?.last_name ?? undefined}
         />
         <aside className="h-fit space-y-6 border border-mist bg-wall p-6 lg:sticky lg:top-24">
           <h2 className="text-lg">Your order</h2>

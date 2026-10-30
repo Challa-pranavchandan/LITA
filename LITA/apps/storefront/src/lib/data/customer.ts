@@ -414,7 +414,7 @@ export type CustomerAddressPayload = {
 };
 
 export async function addCustomerAddress(
-  payloadOrState: any,
+  payloadOrState: CustomerAddressPayload | unknown,
   formData?: FormData
 ): Promise<{ ok: boolean; success?: boolean; error?: string | null }> {
   const headers = await getAuthHeaders();
@@ -438,11 +438,11 @@ export async function addCustomerAddress(
       phone: (formData.get("phone") as string) || "",
     };
   } else if (payloadOrState && typeof payloadOrState === "object") {
-    address = payloadOrState;
+    address = payloadOrState as CustomerAddressPayload;
   }
 
   try {
-    await sdk.store.customer.createAddress(address as any, {}, headers);
+    await sdk.store.customer.createAddress(address as HttpTypes.StoreCreateCustomerAddress, {}, headers);
     revalidatePath("/account");
     return { ok: true, success: true, error: null };
   } catch (err: unknown) {
@@ -470,8 +470,8 @@ export async function deleteCustomerAddress(
 }
 
 export async function updateCustomerAddress(
-  addressIdOrState: any,
-  payloadOrFormData?: any
+  addressIdOrState: string | unknown,
+  payloadOrFormData?: CustomerAddressPayload | FormData | unknown
 ): Promise<{ ok: boolean; success?: boolean; error?: string | null }> {
   const headers = await getAuthHeaders();
   if (!headers.authorization) {
@@ -496,11 +496,11 @@ export async function updateCustomerAddress(
       phone: (payloadOrFormData.get("phone") as string) || "",
     };
   } else if (payloadOrFormData && typeof payloadOrFormData === "object") {
-    address = payloadOrFormData;
+    address = payloadOrFormData as CustomerAddressPayload;
   }
 
   try {
-    await sdk.store.customer.updateAddress(addressId, address as any, {}, headers);
+    await sdk.store.customer.updateAddress(addressId, address as HttpTypes.StoreUpdateCustomerAddress, {}, headers);
     revalidatePath("/account");
     return { ok: true, success: true, error: null };
   } catch (err: unknown) {

@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       revalidatedTags: tagsToRevalidate,
       event: event || null,
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
   }
 }

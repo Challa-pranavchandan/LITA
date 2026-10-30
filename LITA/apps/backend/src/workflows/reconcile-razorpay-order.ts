@@ -21,12 +21,22 @@ export type ReconcileRazorpayOrderInput = {
 
 /* ---------------- STEP 1: Reconcile Session Step ---------------- */
 
+export type ReconcileSessionOutput = {
+  shouldComplete: boolean
+  cart_id: string
+}
+
+export type ReconcileSessionCompensation = {
+  session_id: string
+  previousData: Record<string, any>
+}
+
 export const reconcileSessionStep = createStep(
   "reconcile-session",
   async (
     input: ReconcileRazorpayOrderInput,
     { container }
-  ) => {
+  ): Promise<StepResponse<ReconcileSessionOutput, ReconcileSessionCompensation>> => {
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
     const paymentModule = container.resolve(Modules.PAYMENT) as any
@@ -42,7 +52,10 @@ export const reconcileSessionStep = createStep(
       logger.warn(
         `[reconcile-razorpay-order] Payment session ${input.session_id} not found.`
       )
-      return new StepResponse({ shouldComplete: false, cart_id: "" })
+      return new StepResponse(
+        { shouldComplete: false, cart_id: "" },
+        { session_id: "", previousData: {} }
+      )
     }
 
     const session = sessions[0]
@@ -59,7 +72,10 @@ export const reconcileSessionStep = createStep(
       logger.warn(
         `[reconcile-razorpay-order] No cart linked to payment collection ${session.payment_collection_id}.`
       )
-      return new StepResponse({ shouldComplete: false, cart_id: "" })
+      return new StepResponse(
+        { shouldComplete: false, cart_id: "" },
+        { session_id: "", previousData: {} }
+      )
     }
 
     // 3. Check if an order already exists for this cart
@@ -73,7 +89,10 @@ export const reconcileSessionStep = createStep(
       logger.info(
         `[reconcile-razorpay-order] Order already exists for cart ${cartId}. Recovery not needed.`
       )
-      return new StepResponse({ shouldComplete: false, cart_id: cartId })
+      return new StepResponse(
+        { shouldComplete: false, cart_id: cartId },
+        { session_id: "", previousData: {} }
+      )
     }
 
     // 4. Update payment session data with verified Razorpay payment ID and webhook_verified flag
@@ -102,7 +121,7 @@ export const reconcileSessionStep = createStep(
       { session_id: session.id, previousData: currentData }
     )
   },
-  async (compensationData, { container }) => {
+  async (compensationData: ReconcileSessionCompensation | undefined, { container }) => {
     if (!compensationData?.session_id) return
     const paymentModule = container.resolve(Modules.PAYMENT) as any
     if (typeof paymentModule.updatePaymentSession === "function") {

@@ -72,7 +72,7 @@ export default async function seedIndiaShipping({
 
   logger.info(`Found ${stockLocations.length} stock location(s).`)
 
-  let stockLocation = stockLocations[0]
+  let stockLocation: any = stockLocations[0]
   if (!stockLocation) {
     logger.info("Creating default stock location...")
     const stockLocationModule = container.resolve(ModuleRegistrationName.STOCK_LOCATION)
@@ -96,8 +96,8 @@ export default async function seedIndiaShipping({
   }
 
   // 3. Find or create fulfillment set & service zone for India
-  let fulfillmentSet = stockLocation.fulfillment_sets?.[0]
-  let serviceZone = fulfillmentSet?.service_zones?.find(
+  let fulfillmentSet: any = stockLocation.fulfillment_sets?.[0]
+  let serviceZone: any = fulfillmentSet?.service_zones?.find(
     (sz: any) => sz.geo_zones?.some((gz: any) => gz.country_code?.toLowerCase() === "in")
   ) || fulfillmentSet?.service_zones?.[0]
 
@@ -128,10 +128,11 @@ export default async function seedIndiaShipping({
       },
     })
 
-    serviceZone = fulfillmentSet.service_zones[0]
+    serviceZone = fulfillmentSet?.service_zones?.[0]
   } else if (!serviceZone) {
     logger.info("Adding service zone with India to existing fulfillment set...")
-    serviceZone = await fulfillmentModuleService.createServiceZones(fulfillmentSet.id, {
+    const createdZone = await fulfillmentModuleService.createServiceZones({
+      fulfillment_set_id: fulfillmentSet.id,
       name: "India Delivery Zone",
       geo_zones: [
         {
@@ -140,6 +141,7 @@ export default async function seedIndiaShipping({
         },
       ],
     })
+    serviceZone = Array.isArray(createdZone) ? createdZone[0] : createdZone
   } else {
     // Ensure 'in' country is in the service zone
     const hasIndia = serviceZone.geo_zones?.some(
