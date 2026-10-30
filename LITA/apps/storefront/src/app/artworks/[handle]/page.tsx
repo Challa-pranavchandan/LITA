@@ -9,7 +9,7 @@ import { SaveButton } from "@/components/SaveButton";
 import { InquiryForm } from "@/components/InquiryForm";
 import { ArtworkGrid } from "@/components/ArtworkGrid";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 type Props = { params: Promise<{ handle: string }> };
 

@@ -68,9 +68,49 @@ Stripe uses `@stripe/react-stripe-js` with the session's `client_secret`. Razorp
 - The copy in `src/app/about/page.tsx` and `src/app/shipping/page.tsx`, and the homepage paragraph in `src/app/page.tsx`
 - Price bands in `src/components/BrowseFilters.tsx` and the "Under ₹5,000" link in `src/lib/config.ts` if your currency is not INR
 
-## Notes
+## Authentication System & Supabase Integration
 
-- Pages render on request, so the build does not need the backend running.
-- Price filtering, sorting and paging happen in memory over up to 200 products, because Medusa's Store API has no price filter. Move to Meilisearch or Algolia if the catalogue grows past a few hundred works.
-- Saved works live in `localStorage`, so they are per browser.
-- The bag is a Medusa cart tracked by an `httpOnly` cookie for 14 days. Signed-in customers are attached to the cart at checkout.
+The storefront features an editorial gallery-styled authentication pipeline with Medusa v2 customer accounts, cart synchronization, and optional Supabase identity provider integration.
+
+### Routes
+- `/register` — Create account with first/last name, email, password, and marketing opt-in flag.
+- `/login` — Sign in with email and password, secure `httpOnly` cookie session (`_medusa_jwt`), and `?next=` redirection.
+- `/forgot-password` — Password reset request form (generic responses to prevent account enumeration).
+- `/reset-password` — Password reset completion with token verification.
+- `/verify-email` — Handles email verification notice, success, and expired states.
+- `/auth/callback` — Route handler exchanging authentication/verification codes.
+- `/account` — Protected customer dashboard featuring profile management, password updates, and Medusa order history.
+
+### Supabase Dashboard Configuration (Optional)
+If utilizing Supabase as the identity provider alongside Medusa:
+1. **Site URL:**
+   - Go to **Authentication > URL Configuration > Site URL** and set to `http://localhost:8000` (production: `https://yourdomain.com`).
+2. **Redirect URLs:**
+   - Under **Redirect URLs**, add:
+     - `http://localhost:8000/auth/callback`
+     - `http://localhost:8000/verify-email`
+     - `https://yourdomain.com/auth/callback` (production)
+3. **Email Templates:**
+   - Go to **Authentication > Email Templates** to customize the confirmation and password recovery templates.
+4. **Database Schema:**
+   - Run the SQL migration in `supabase/migrations/01_profiles_and_rls.sql` in the Supabase SQL Editor to establish the `public.profiles` table, RLS policies, and new-user trigger.
+
+### Medusa Backend CORS Configuration
+In `apps/backend/.env`, ensure allowed origins include the storefront port:
+```env
+STORE_CORS=http://localhost:8000,http://127.0.0.1:8000
+AUTH_CORS=http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173,http://localhost:9000
+STOREFRONT_URL=http://localhost:8000
+```
+
+### Manual Testing Checklist
+- [ ] **Register (`/register`):** Enter first name, last name, valid email, password (min 8 chars), and check marketing opt-in. Verify successful registration, auto-login, and redirection to `/account`.
+- [ ] **Register Validation:** Attempt submitting with empty fields or <8 char password; verify inline red error text.
+- [ ] **Login (`/login`):** Sign in with existing credentials. Verify redirection to `/account` (or `?next=` URL).
+- [ ] **Wrong Password:** Attempt logging in with incorrect credentials. Verify generic "Email or password is incorrect" message.
+- [ ] **Protected Route Redirect:** Visit `/account` in an incognito window. Verify redirect to `/login?next=%2Faccount`.
+- [ ] **Guest-Only Redirect:** Visit `/login` while logged in. Verify automatic redirect to `/account`.
+- [ ] **Guest Cart Merge:** Add an artwork to bag as a guest. Navigate to `/login` and sign in. Verify items in the cart drawer remain intact and linked to the customer account.
+- [ ] **Checkout Prefill:** Navigate to `/checkout` as a logged-in customer. Verify first name, last name, and email are automatically prefilled in the shipping address step.
+- [ ] **Forgot & Reset Password:** Request password reset on `/forgot-password`. Verify email dispatched (or console token logged). Click reset link on `/reset-password?token=...` and set new password.
+- [ ] **Logout:** Click "Sign Out" on `/account`. Verify session cleared and redirected to `/login`.

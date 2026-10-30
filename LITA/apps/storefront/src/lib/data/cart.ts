@@ -19,18 +19,53 @@ function message(e: unknown): string {
   return "Something went wrong. Try again.";
 }
 
+function isCartStaleOrNotFoundError(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const msg = "message" in e ? String((e as any).message).toLowerCase() : "";
+  const status = "status" in e ? (e as any).status : undefined;
+  return (
+    status === 404 ||
+    status === 400 ||
+    status === 422 ||
+    msg.includes("not found") ||
+    msg.includes("already completed") ||
+    msg.includes("completed") ||
+    msg.includes("does not exist") ||
+    msg.includes("cannot be found") ||
+    msg.includes("invalid cart")
+  );
+}
+
+const isCartNotFoundError = isCartStaleOrNotFoundError;
+
 async function cartId(): Promise<string | undefined> {
-  return (await cookies()).get(CART_COOKIE)?.value;
+  const cookieStore = await cookies();
+  return cookieStore.get(CART_COOKIE)?.value ?? cookieStore.get("_medusa_cart_id")?.value;
 }
 
 async function setCartCookie(id: string) {
-  (await cookies()).set(CART_COOKIE, id, {
+  const cookieStore = await cookies();
+  const options = {
     maxAge: 60 * 60 * 24 * 14,
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
-  });
+  };
+  cookieStore.set(CART_COOKIE, id, options);
+  cookieStore.set("_medusa_cart_id", id, options);
+}
+
+export async function clearStaleCart(): Promise<void> {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete(CART_COOKIE);
+    cookieStore.delete("_medusa_cart_id");
+    cookieStore.set(CART_COOKIE, "", { maxAge: -1, path: "/" });
+    cookieStore.set("_medusa_cart_id", "", { maxAge: -1, path: "/" });
+  } catch {
+    // Cannot mutate cookies in pure Server Component render contexts
+  }
 }
 
 export async function getCart(): Promise<HttpTypes.StoreCart | null> {
@@ -38,8 +73,16 @@ export async function getCart(): Promise<HttpTypes.StoreCart | null> {
   if (!id) return null;
   try {
     const { cart } = await sdk.store.cart.retrieve(id, { fields: CART_FIELDS });
+    // If the cart was already completed (order placed), it cannot be used as an active cart!
+    if (cart.completed_at) {
+      await clearStaleCart();
+      return null;
+    }
     return cart;
-  } catch {
+  } catch (e) {
+    if (isCartStaleOrNotFoundError(e)) {
+      await clearStaleCart();
+    }
     return null;
   }
 }
@@ -90,6 +133,28 @@ export async function updateLineItem(
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
+    return { ok: false, error: message(e) };
+  }
+}
+
+export async function deleteLineItem(lineId: string): Promise<ActionResult> {
+  const id = await cartId();
+  if (!id) return { ok: false, error: "Your bag is empty." };
+  try {
+    await sdk.store.cart.deleteLineItem(id, lineId);
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -101,7 +166,12 @@ export async function applyPromoCode(code: string): Promise<ActionResult> {
     await sdk.store.cart.update(id, { promo_codes: [code.trim()] });
     refresh();
     return { ok: true };
-  } catch {
+  } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: "That code isn't valid for this bag." };
   }
 }
@@ -118,6 +188,11 @@ export async function removePromoCode(code: string): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -148,6 +223,11 @@ export async function saveAddress(input: AddressInput): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -175,6 +255,11 @@ export async function chooseShipping(optionId: string): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -195,6 +280,7 @@ export async function listPaymentProviders(): Promise<
 }
 
 export async function startPayment(providerId: string): Promise<ActionResult> {
+
   const cart = await getCart();
   if (!cart) return { ok: false, error: "Your bag is empty." };
   try {
@@ -204,6 +290,11 @@ export async function startPayment(providerId: string): Promise<ActionResult> {
     refresh();
     return { ok: true };
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
 }
@@ -228,8 +319,13 @@ export async function placeOrder(): Promise<ActionResult> {
       };
     }
     orderId = res.order.id;
-    (await cookies()).delete(CART_COOKIE);
+    await clearStaleCart();
   } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
     return { ok: false, error: message(e) };
   }
   refresh();
@@ -256,9 +352,156 @@ export async function attachCustomerToCart(): Promise<void> {
   if (!id || !headers.authorization) return;
   try {
     await sdk.store.cart.transferCart(id, {}, headers);
-  } catch {
+  } catch (e) {
+    if (isCartNotFoundError(e)) {
+      await clearStaleCart();
+    }
     /* cart is already linked or the session expired; checkout still works as a guest */
   }
 }
 
+export async function updateRegion(
+  countryCode: string,
+  currentPath: string
+): Promise<void> {
+  const id = await cartId();
+  if (id) {
+    const region = await getRegion();
+    if (region) {
+      try {
+        await sdk.store.cart.update(id, { region_id: region.id });
+      } catch (e) {
+        if (isCartNotFoundError(e)) {
+          await clearStaleCart();
+        }
+      }
+    }
+  }
+  refresh();
+}
+
 export const retrieveCart = getCart;
+
+export async function listCartOptions(): Promise<{
+  shipping_options: HttpTypes.StoreCartShippingOption[];
+}> {
+  const shipping_options = await listShippingOptions();
+  return { shipping_options };
+}
+
+export async function setShippingMethod({
+  cartId: providedCartId,
+  shippingMethodId,
+}: {
+  cartId?: string;
+  shippingMethodId: string;
+}): Promise<ActionResult> {
+  const id = providedCartId || (await cartId());
+  if (!id) return { ok: false, error: "Your bag is empty." };
+  try {
+    await sdk.store.cart.addShippingMethod(id, { option_id: shippingMethodId });
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    if (isCartStaleOrNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
+    return { ok: false, error: message(e) };
+  }
+}
+
+export async function initiatePaymentSession(
+  cart: HttpTypes.StoreCart,
+  data: {
+    provider_id: string;
+    context?: Record<string, unknown>;
+    data?: Record<string, unknown>;
+  }
+): Promise<HttpTypes.StorePaymentCollection> {
+  const sessionData = data.data ?? data.context;
+  const { payment_collection } = await sdk.store.payment.initiatePaymentSession(
+    cart,
+    {
+      provider_id: data.provider_id,
+      ...(sessionData ? { data: sessionData } : {}),
+    }
+  );
+  refresh();
+  return payment_collection;
+}
+
+export async function applyPromotions(codes: string[]): Promise<ActionResult> {
+  const id = await cartId();
+  if (!id) return { ok: false, error: "Your bag is empty." };
+  try {
+    await sdk.store.cart.update(id, { promo_codes: codes });
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    if (isCartStaleOrNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return { ok: false, error: "Your bag session expired. Please refresh the page." };
+    }
+    return { ok: false, error: message(e) };
+  }
+}
+
+export async function setAddresses(
+  _currentState: unknown,
+  formData: FormData
+): Promise<string | null> {
+  const id = await cartId();
+  if (!id) return "Your bag is empty.";
+
+  const email = (formData.get("email") as string) || "";
+  const sameAsBilling = formData.get("same_as_billing") === "on";
+
+  const shipping_address: Record<string, string> = {
+    first_name: (formData.get("shipping_address.first_name") as string) || "",
+    last_name: (formData.get("shipping_address.last_name") as string) || "",
+    company: (formData.get("shipping_address.company") as string) || "",
+    address_1: (formData.get("shipping_address.address_1") as string) || "",
+    address_2: (formData.get("shipping_address.address_2") as string) || "",
+    city: (formData.get("shipping_address.city") as string) || "",
+    country_code: (formData.get("shipping_address.country_code") as string) || "",
+    province: (formData.get("shipping_address.province") as string) || "",
+    postal_code: (formData.get("shipping_address.postal_code") as string) || "",
+    phone: (formData.get("shipping_address.phone") as string) || "",
+  };
+
+  const billing_address: Record<string, string> = sameAsBilling
+    ? shipping_address
+    : {
+        first_name: (formData.get("billing_address.first_name") as string) || "",
+        last_name: (formData.get("billing_address.last_name") as string) || "",
+        company: (formData.get("billing_address.company") as string) || "",
+        address_1: (formData.get("billing_address.address_1") as string) || "",
+        address_2: (formData.get("billing_address.address_2") as string) || "",
+        city: (formData.get("billing_address.city") as string) || "",
+        country_code: (formData.get("billing_address.country_code") as string) || "",
+        province: (formData.get("billing_address.province") as string) || "",
+        postal_code: (formData.get("billing_address.postal_code") as string) || "",
+        phone: (formData.get("billing_address.phone") as string) || "",
+      };
+
+  try {
+    await sdk.store.cart.update(id, {
+      email,
+      shipping_address,
+      billing_address,
+    });
+    refresh();
+    return null;
+  } catch (e) {
+    if (isCartStaleOrNotFoundError(e)) {
+      await clearStaleCart();
+      refresh();
+      return "Your bag session expired. Please refresh the page.";
+    }
+    return message(e);
+  }
+}
+

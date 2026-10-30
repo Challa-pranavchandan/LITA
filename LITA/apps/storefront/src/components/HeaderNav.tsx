@@ -44,36 +44,36 @@ export function HeaderNav({
   const displayMediums =
     categories.length > 0
       ? categories.slice(0, 8).map((c) => ({
-          label: c.name,
-          href: `/artworks?category=${c.handle}`,
-        }))
+        label: c.name,
+        href: `/artworks?category=${c.handle}`,
+      }))
       : [
-          { label: "Painting", href: "/artworks?category=paintings" },
-          { label: "Drawing", href: "/artworks?category=drawings" },
-          { label: "Sculpture", href: "/artworks?category=sculptures" },
-          { label: "Print", href: "/artworks?category=prints" },
-          { label: "Photography", href: "/artworks?category=photography" },
-          { label: "Installation", href: "/artworks?category=installations" },
-          { label: "Mixed-Media", href: "/artworks?category=mixed-media" },
-        ];
+        { label: "Painting", href: "/artworks?category=paintings" },
+        { label: "Drawing", href: "/artworks?category=drawings" },
+        { label: "Sculpture", href: "/artworks?category=sculptures" },
+        { label: "Print", href: "/artworks?category=prints" },
+        { label: "Photography", href: "/artworks?category=photography" },
+        { label: "Installation", href: "/artworks?category=installations" },
+        { label: "Mixed-Media", href: "/artworks?category=mixed-media" },
+      ];
 
   // Fallback collections if no collections from backend
   const displayCollections =
     collections.length > 0
       ? collections.slice(0, 8).map((c) => ({
-          label: c.title,
-          href: `/collections/${c.handle}`,
-        }))
+        label: c.title,
+        href: `/collections/${c.handle}`,
+      }))
       : [
-          { label: "Focus", href: "/collections" },
-          { label: "Collaborator's Picks", href: "/collections" },
-          { label: "Realism", href: "/collections" },
-          { label: "Color", href: "/collections" },
-          { label: "Neutral", href: "/collections" },
-          { label: "Large-Scale Statements", href: "/collections" },
-          { label: "Diptychs & Triptychs", href: "/collections" },
-          { label: "Unconventional Shapes", href: "/collections" },
-        ];
+        { label: "Focus", href: "/collections" },
+        { label: "Collaborator's Picks", href: "/collections" },
+        { label: "Realism", href: "/collections" },
+        { label: "Color", href: "/collections" },
+        { label: "Neutral", href: "/collections" },
+        { label: "Large-Scale Statements", href: "/collections" },
+        { label: "Diptychs & Triptychs", href: "/collections" },
+        { label: "Unconventional Shapes", href: "/collections" },
+      ];
 
   return (
     <div className="contents">
@@ -190,16 +190,16 @@ export function HeaderNav({
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >
-                      Art Under $350
+                      Art Under 450rs
                     </Link>
                   </li>
                   <li>
                     <Link
-                      href="/artworks?max=800"
+                      href="/artworks?max=1000"
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >
-                      Art Under $800
+                      Art Under 1000rs
                     </Link>
                   </li>
                   <li>
@@ -215,9 +215,9 @@ export function HeaderNav({
                     <Link
                       href="/commissions"
                       onClick={() => setActiveMenu(null)}
-                      className="text-[#222222] hover:text-black transition-colors block"
+                      className="text-red-600 hover:text-red-700 transition-colors font-medium block"
                     >
-                      Custom Artwork
+                      Commission Artwork
                     </Link>
                   </li>
                   <li className="pt-1">
@@ -323,6 +323,7 @@ export function HeaderNav({
                     Past
                   </Link>
                 </li>
+
                 <li className="pt-2">
                   <Link
                     href="/artworks"
@@ -346,45 +347,43 @@ export function HeaderNav({
                 <ul className="space-y-2.5 text-[14px]">
                   <li>
                     <Link
-                      href="/about"
+                      href="/gallery"
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >
-                      The Gallery
+                      Photo Gallery
                     </Link>
+                  </li>
+                  <li className="flex items-center gap-2 cursor-not-allowed select-none text-[#555555]">
+                    <span>The Gallery</span>
+                    <span className="text-red-500 text-[12px] font-medium tracking-wide animate-blink-slow">
+                      (coming soon)
+                    </span>
                   </li>
                 </ul>
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
-                  Advisory
+                  SERVICES
                 </p>
                 <ul className="space-y-2.5 text-[14px]">
+
                   <li>
                     <Link
-                      href="/commissions"
-                      onClick={() => setActiveMenu(null)}
-                      className="text-[#222222] hover:text-black transition-colors block"
-                    >
-                      For Individuals
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/commissions"
-                      onClick={() => setActiveMenu(null)}
-                      className="text-[#222222] hover:text-black transition-colors block"
-                    >
-                      For Companies
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/commissions"
+                      href="/trade"
                       onClick={() => setActiveMenu(null)}
                       className="text-[#222222] hover:text-black transition-colors block"
                     >
                       For Trade
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/commissions"
+                      onClick={() => setActiveMenu(null)}
+                      className="text-red-600 hover:text-red-700 transition-colors font-medium block"
+                    >
+                      Bespoke Commissions
                     </Link>
                   </li>
                   <li className="pt-1">
@@ -393,7 +392,7 @@ export function HeaderNav({
                       onClick={() => setActiveMenu(null)}
                       className="text-[#111111] underline underline-offset-4 font-normal block hover:opacity-75"
                     >
-                      All Services
+                      All Advisory Services
                     </Link>
                   </li>
                 </ul>
@@ -407,31 +406,20 @@ export function HeaderNav({
               <ul className="space-y-3 text-[14px]">
                 <li>
                   <Link
-                    href="/artworks?sort=newest"
-                    onClick={() => setActiveMenu(null)}
-                    className="text-[#222222] hover:text-black transition-colors block"
-                  >
-                    Recently Joined
-                  </Link>
-                </li>
-                <li>
-                  <Link
                     href="/about"
                     onClick={() => setActiveMenu(null)}
                     className="text-[#222222] hover:text-black transition-colors block"
                   >
-                    Inside the Studio
+                    About
                   </Link>
                 </li>
-                <li className="pt-2">
-                  <Link
-                    href="/artworks"
-                    onClick={() => setActiveMenu(null)}
-                    className="text-[#111111] underline underline-offset-4 font-normal block hover:opacity-75"
-                  >
-                    All Artists
-                  </Link>
+                <li className="flex items-center gap-2 cursor-not-allowed select-none text-[#555555]">
+                  <span>Inside the Studio</span>
+                  <span className="text-red-500 text-[12px] font-medium tracking-wide animate-blink-slow">
+                    (coming soon)
+                  </span>
                 </li>
+
               </ul>
             </div>
           )}

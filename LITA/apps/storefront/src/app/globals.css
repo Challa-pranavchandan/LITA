@@ -1,6 +1,6 @@
 @import "@fontsource-variable/familjen-grotesk";
 @import "@fontsource-variable/literata";
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -61,6 +61,20 @@
   }
 }
 
+@keyframes blinkSlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+.animate-blink-slow {
+  animation: blinkSlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+
 @layer components {
   .page {
     @apply mx-auto w-full max-w-page px-5 md:px-8;
@@ -93,5 +107,22 @@
   }
   .prose-art p + p {
     margin-top: 1em;
+  }
+  /* Full-width 3-card carousel */
+  .recently-added-card {
+    flex: 0 0 88vw;
+    width: 88vw;
+  }
+  @media (min-width: 640px) {
+    .recently-added-card {
+      flex: 0 0 calc((100% - 24px) / 2);
+      width: calc((100% - 24px) / 2);
+    }
+  }
+  @media (min-width: 1024px) {
+    .recently-added-card {
+      flex: 0 0 calc((100% - 48px) / 3);
+      width: calc((100% - 48px) / 3);
+    }
   }
 }

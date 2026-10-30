@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { listCategories, listCollections } from "@/lib/data/catalog";
 import { getCart } from "@/lib/data/cart";
 import { getCustomer } from "@/lib/data/customer";
@@ -6,15 +7,22 @@ import { MobileMenu } from "@/components/MobileMenu";
 import { PromoBanner } from "@/components/PromoBanner";
 import { HeaderNav } from "@/components/HeaderNav";
 import { HeaderActions } from "@/components/HeaderActions";
-import { UpriseArtLogo } from "@/components/livinIcons";
+import { NavLogo } from "@/components/layout/Navbar";
 
 export async function Header() {
+  const cookieStore = await cookies();
+  const rawCartId =
+    cookieStore.get("_cart_id")?.value ||
+    cookieStore.get("_medusa_cart_id")?.value;
+
   const [categories, collections, cart, customer] = await Promise.all([
     listCategories().catch(() => []),
     listCollections().catch(() => []),
     getCart().catch(() => null),
     getCustomer().catch(() => null),
   ]);
+
+  const hasStaleCart = Boolean(rawCartId && !cart);
 
   return (
     <div className="w-full">
@@ -27,15 +35,13 @@ export async function Header() {
           {/* Left: Mobile menu toggle (if mobile) + LIVININ THE ART Logo */}
           <div className="flex flex-1 items-center justify-start gap-3">
             <div className="lg:hidden">
-              <MobileMenu categories={categories} collections={collections} />
+              <MobileMenu
+                categories={categories}
+                collections={collections}
+                customer={customer}
+              />
             </div>
-            <Link
-              href="/"
-              aria-label="LIVININ THE ART Home"
-              className="inline-flex items-center text-[#111111] transition-opacity hover:opacity-75 focus-visible:outline-none"
-            >
-              <UpriseArtLogo className="text-[11px] md:text-[12px] tracking-[0.25em] font-light text-[#111111]" />
-            </Link>
+            <NavLogo />
           </div>
 
           {/* Center: Main Navigation (Desktop) */}
@@ -48,7 +54,11 @@ export async function Header() {
 
           {/* Right: Action Icons (Search, Heart/Saved, Cart, User/Account) */}
           <div className="flex flex-1 items-center justify-end">
-            <HeaderActions cart={cart} customer={customer} />
+            <HeaderActions
+              cart={cart}
+              customer={customer}
+              hasStaleCart={hasStaleCart}
+            />
           </div>
         </div>
       </header>

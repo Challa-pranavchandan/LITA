@@ -117,24 +117,26 @@ export const removePendingCustomer = async () => {
 
 export const getCartId = async () => {
   const cookies = await nextCookies()
-  return cookies.get("_medusa_cart_id")?.value
+  return cookies.get("_cart_id")?.value ?? cookies.get("_medusa_cart_id")?.value
 }
 
 // See the note on `setAuthToken`: `sameSite: "lax"` so the cart cookie survives
 // the cross-site return navigation from a redirect-based payment method.
 export const setCartId = async (cartId: string) => {
   const cookies = await nextCookies()
-  cookies.set("_medusa_cart_id", cartId, {
-    maxAge: 60 * 60 * 24 * 7,
+  const options = {
+    maxAge: 60 * 60 * 24 * 14,
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
-  })
+    path: "/",
+  }
+  cookies.set("_cart_id", cartId, options)
+  cookies.set("_medusa_cart_id", cartId, options)
 }
 
 export const removeCartId = async () => {
   const cookies = await nextCookies()
-  cookies.set("_medusa_cart_id", "", {
-    maxAge: -1,
-  })
+  cookies.set("_cart_id", "", { maxAge: -1, path: "/" })
+  cookies.set("_medusa_cart_id", "", { maxAge: -1, path: "/" })
 }
