@@ -340,15 +340,90 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
   }
 
   async refundPayment(input: RefundPaymentInput): Promise<RefundPaymentOutput> {
-    const { data, amount } = input
+    const { data, amount, context } = input
     const paymentId = data?.razorpay_payment_id as string | undefined
+
     if (!paymentId) {
-      return { data: input.data }
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Cannot refund: no Razorpay payment id on this payment"
+      )
     }
 
-    const refund = await this.client_.payments.refund(paymentId, {
-      amount: toPaise(amount),
-    })
+    const refundPaise = toPaise(amount)
+    if (refundPaise <= 0 || !Number.isFinite(refundPaise)) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Cannot refund: refund amount must be greater than 0"
+      )
+    }
+
+    // 1. Fetch authoritative payment details from Razorpay to validate captured amount
+    let payment: any
+    try {
+      payment = await this.client_.payments.fetch(paymentId)
+    } catch (error: any) {
+      this.logger_?.error?.(
+        `[Razorpay] Failed to fetch payment ${paymentId} for refund: ${error?.message || error}`
+      )
+      throw new MedusaError(
+        MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
+        `Failed to fetch Razorpay payment ${paymentId} for refund: ${error?.message || "Unknown error"}`
+      )
+    }
+
+    // 2. Validate refund amount against captured payment
+    const capturedPaise = Number(payment.amount)
+    if (refundPaise > capturedPaise) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Cannot refund: requested amount (${refundPaise} paise) exceeds captured amount (${capturedPaise} paise)`
+      )
+    }
+
+    const alreadyRefunded = Number(payment.amount_refunded || 0)
+    if (refundPaise > capturedPaise - alreadyRefunded) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Cannot refund: requested amount (${refundPaise} paise) exceeds remaining refundable amount (${capturedPaise - alreadyRefunded} paise)`
+      )
+    }
+
+    // 3. Make refund idempotent:
+    // Razorpay supports an optional unique `receipt` parameter (up to 40 characters) on refunds.
+    // By forwarding Medusa's idempotency key or refund ID as `receipt` and tagging `notes.medusa_refund_id`,
+    // any duplicate API calls following a network timeout will reference the same transaction context,
+    // allowing Razorpay to recognize the duplicate request or return the existing refund rather than
+    // creating an erroneous second debit.
+    const receipt = context?.idempotency_key
+      ? String(context.idempotency_key).slice(0, 40)
+      : (data?.refund_id ? String(data.refund_id).slice(0, 40) : undefined)
+
+    const refundPayload: Record<string, any> = {
+      amount: refundPaise,
+      notes: {
+        payment_id: paymentId,
+        ...(receipt ? { receipt } : {}),
+        ...(data?.refund_id ? { medusa_refund_id: String(data.refund_id) } : {}),
+      },
+    }
+    if (receipt) {
+      refundPayload.receipt = receipt
+    }
+
+    // 4. Dispatch refund to Razorpay API
+    let refund: any
+    try {
+      refund = await this.client_.payments.refund(paymentId, refundPayload)
+    } catch (error: any) {
+      this.logger_?.error?.(
+        `[Razorpay] Failed to refund payment ${paymentId}: ${error?.message || error}`
+      )
+      throw new MedusaError(
+        MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
+        `Failed to refund Razorpay payment ${paymentId}: ${error?.message || "Unknown error"}`
+      )
+    }
 
     return {
       data: {

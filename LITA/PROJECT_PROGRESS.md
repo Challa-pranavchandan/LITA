@@ -390,6 +390,14 @@
     - **Storefront & Prefill Integration:** Updated `apps/storefront/src/lib/data/trade.ts` (`getCustomerTradeApplication`) to remove the email argument and supply customer authorization headers. Updated caller in `apps/storefront/src/app/account/page.tsx`. Added prefill props to `TradeApplicationModal.tsx` and wired customer details prefill in `AccountDashboard.tsx`.
     - **Automated Tests:** Added 15 backend unit tests in `apps/backend/src/api/store/trade-applications/__tests__/trade-applications.unit.spec.ts` and 4 storefront tests in `apps/storefront/src/__tests__/trade.test.js`. All 38 storefront tests and 15 backend tests pass.
 
+29. **B8a — Razorpay Refund Hardening & Idempotency:**
+    - **Problem:** `refundPayment` in `apps/backend/src/modules/razorpay/service.ts` previously returned `{ data: input.data }` when `razorpay_payment_id` was missing, allowing Medusa to record successful refunds without contacting Razorpay. API errors were not mapped to explicit Medusa errors, refund amounts were not verified against the actual captured payment, and duplicate calls following network timeouts risked duplicate debits.
+    - **Missing Payment ID Guard:** Throws `MedusaError(MedusaError.Types.INVALID_DATA, "Cannot refund: no Razorpay payment id on this payment")` if `razorpay_payment_id` is missing.
+    - **Amount & Balance Validation:** Enforces `amount > 0`. Queries Razorpay via `client_.payments.fetch(paymentId)` and validates that requested `refundPaise` does not exceed `capturedPaise` (`payment.amount`) and does not exceed remaining refundable balance (`capturedPaise - (payment.amount_refunded || 0)`), throwing `INVALID_DATA` on mismatch.
+    - **Idempotency Protection:** Forwards Medusa's idempotency key (`context.idempotency_key`) or refund ID (`data.refund_id`) as Razorpay's `receipt` (max 40 characters) and notes (`payment_id`, `receipt`, `medusa_refund_id`), preventing duplicate refunds on retries after network timeouts. Documented idempotency mechanics directly in code comments.
+    - **Hardened Error Handling & Sanitized Logging:** Catches fetch and refund failures, logging only the payment ID and error message (strictly never leaking secrets or authentication keys), and throws `MedusaError(MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR, ...)` with descriptive messages.
+    - **Automated Tests:** Added 8 comprehensive unit tests to `apps/backend/src/modules/razorpay/__tests__/razorpay-provider.unit.spec.ts` covering missing ID, zero/negative amounts, fetch failures, amount exceeding captured/remaining balances, refund API failures with sanitized logging, partial refunds with receipt/notes, and full refunds. All 47 tests pass.
+
 ---
 
 ## 6. Production Readiness Audit (30 Oct 2026)
@@ -472,13 +480,14 @@ All items in the original blocker have been closed:
 - Exit test confirmed: `npm ci && npm run lint && npm run test && npm run build` all pass with zero ignored errors from a fresh clone.
 
 **B8. Razorpay go-live and hardening.**
-Already built well (HMAC, API re-verification of amount/currency/order, replay check, webhook recovery). Still open:
+Already built well (HMAC, API re-verification of amount/currency/order, replay check, webhook recovery).
+- **[RESOLVED — B8a]** `refundPayment` throws `MedusaError(INVALID_DATA)` when `razorpay_payment_id` is missing, verifies positive amounts against actual captured payments (`client_.payments.fetch`) and remaining balances, sends idempotency `receipt` (max 40 chars) and notes, and safely logs/throws `PAYMENT_AUTHORIZATION_ERROR` without exposing secrets (8 unit tests passed).
+Still open:
 - Complete KYC, enable auto-capture, live keys, live webhook with secret, 1 INR live test and refund test (from section 6 of the old roadmap).
-- `refundPayment` returns success silently when `razorpay_payment_id` is missing. It should throw, otherwise Medusa can record a refund that never happened.
-- `webhook_verified` (which skips the HMAC check) can be supplied by the browser through `initiatePaymentSession` data, because `updatePayment` spreads client data. Razorpay's API check still applies, so exploitation is hard, but only the reconcile workflow should be able to set it. Strip it, and strip client-supplied `razorpay_order_id` in the update path.
-- Replay protection uses `listPayments({ data: { razorpay_payment_id } })`. Verify that JSON filter really works against PostgreSQL with an integration test.
-- `initiatePayment` does not reject non-INR currencies (only `authorizePayment` does).
-- `refund.processed` / `refund.failed` webhooks are ignored, so refunds made in the Razorpay dashboard will not show in Medusa. Document the rule "refund only from Medusa Admin" or add a logging subscriber.
+- `webhook_verified` (which skips the HMAC check) can be supplied by the browser through `initiatePaymentSession` data, because `updatePayment` spreads client data. Razorpay's API check still applies, so exploitation is hard, but only the reconcile workflow should be able to set it. Strip it, and strip client-supplied `razorpay_order_id` in the update path (B8b).
+- Replay protection uses `listPayments({ data: { razorpay_payment_id } })`. Verify that JSON filter really works against PostgreSQL with an integration test (B8d).
+- `initiatePayment` does not reject non-INR currencies (only `authorizePayment` does) (B8c).
+- `refund.processed` / `refund.failed` webhooks are ignored, so refunds made in the Razorpay dashboard will not show in Medusa. Document the rule "refund only from Medusa Admin" or add a logging subscriber (B8e).
 - CSP (see S1) must allow Razorpay before enforcement.
 
 **B9. Legal, tax and policy content.**
@@ -577,6 +586,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **B1 — Remove manual payment path:** Storefront UI + server-side action guards, check:prod-config backend validation script, SEED_DEMO_DATA guard, 25 unit tests passed (section 5 item 26)
 - [x] **B2 — Hardening ISR revalidate endpoint:** constant-time verification, header-preferred POST-only route, Medusa production startup guard, backend subscriber header auth, 9 unit tests passed (section 5 item 27)
 - [x] **B3 — Trade application data leak:** require customer authentication on GET, query-level case-insensitive filtering ($ilike) without in-memory limits, safe field projection, deduplication on POST, 15 backend unit tests + 4 storefront unit tests passed (section 5 item 28)
+- [x] **B8a — Razorpay refund hardening:** throw on missing payment ID, validate amount against captured payment, ensure idempotency via receipt/notes, safe logging without secrets, 8 unit tests passed (section 5 item 29)
 
 ### CP0 - Clean baseline (COMPLETE — exit test passed)
 - [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
@@ -593,9 +603,9 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] Remove/gate `pp_system_default` (B1)
 - [x] Fix revalidate auth, drop GET, rotate secret, add to backend env (B2)
 - [x] Require auth on trade lookup and filter in query (B3)
-- [ ] Strip `webhook_verified` and client `razorpay_order_id` from client data (B8)
-- [ ] Make `refundPayment` throw when no payment id (B8)
-- [ ] Reject non-INR in `initiatePayment` (B8)
+- [x] Make `refundPayment` throw when no payment id, validate captured balance, add idempotency (B8a)
+- [ ] Strip `webhook_verified` and client `razorpay_order_id` from client data (B8b)
+- [ ] Reject non-INR in `initiatePayment` (B8c)
 - [ ] Block reset-link console logging in production
 - [ ] Zod validation on `POST /store/feedback`; file magic-byte check (S3)
 - [ ] Distributed rate limiting on all public forms and auth routes (S2)

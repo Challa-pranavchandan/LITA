@@ -554,21 +554,207 @@ describe("RazorpayProviderService Unit Tests", () => {
   })
 
   describe("refundPayment", () => {
-    it("calls payments.refund with amount in paise", async () => {
+    it("throws MedusaError when razorpay_payment_id is missing", async () => {
+      await expect(
+        service.refundPayment({
+          amount: 250,
+          data: {},
+        })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          type: MedusaError.Types.INVALID_DATA,
+          message: "Cannot refund: no Razorpay payment id on this payment",
+        })
+      )
+    })
+
+    it("throws MedusaError when refund amount is 0 or negative", async () => {
+      await expect(
+        service.refundPayment({
+          amount: 0,
+          data: { razorpay_payment_id: "pay_123" },
+        })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          type: MedusaError.Types.INVALID_DATA,
+          message: "Cannot refund: refund amount must be greater than 0",
+        })
+      )
+
+      await expect(
+        service.refundPayment({
+          amount: -10,
+          data: { razorpay_payment_id: "pay_123" },
+        })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          type: MedusaError.Types.INVALID_DATA,
+          message: "Cannot refund: refund amount must be greater than 0",
+        })
+      )
+    })
+
+    it("throws MedusaError when Razorpay payment fetch fails", async () => {
+      mockPaymentsFetch.mockRejectedValueOnce(new Error("Network error"))
+
+      await expect(
+        service.refundPayment({
+          amount: 250,
+          data: { razorpay_payment_id: "pay_123" },
+        })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          type: MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
+          message: expect.stringContaining("Failed to fetch Razorpay payment pay_123"),
+        })
+      )
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining("[Razorpay] Failed to fetch payment pay_123")
+      )
+    })
+
+    it("throws MedusaError when refund amount exceeds captured amount", async () => {
+      mockPaymentsFetch.mockResolvedValueOnce({
+        id: "pay_123",
+        amount: 50000, // 500 INR in paise
+        amount_refunded: 0,
+        status: "captured",
+      })
+
+      await expect(
+        service.refundPayment({
+          amount: 600, // 60000 paise > 50000 paise
+          data: { razorpay_payment_id: "pay_123" },
+        })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          type: MedusaError.Types.INVALID_DATA,
+          message: "Cannot refund: requested amount (60000 paise) exceeds captured amount (50000 paise)",
+        })
+      )
+    })
+
+    it("throws MedusaError when refund amount exceeds remaining refundable amount", async () => {
+      mockPaymentsFetch.mockResolvedValueOnce({
+        id: "pay_123",
+        amount: 50000, // 500 INR
+        amount_refunded: 30000, // 300 INR already refunded, 200 INR remaining
+        status: "captured",
+      })
+
+      await expect(
+        service.refundPayment({
+          amount: 250, // 25000 paise > 20000 paise remaining
+          data: { razorpay_payment_id: "pay_123" },
+        })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          type: MedusaError.Types.INVALID_DATA,
+          message: "Cannot refund: requested amount (25000 paise) exceeds remaining refundable amount (20000 paise)",
+        })
+      )
+    })
+
+    it("throws MedusaError when Razorpay payments.refund API fails and logs payment id without secrets", async () => {
+      mockPaymentsFetch.mockResolvedValueOnce({
+        id: "pay_123",
+        amount: 50000,
+        amount_refunded: 0,
+        status: "captured",
+      })
+      mockPaymentsRefund.mockRejectedValueOnce(new Error("Gateway timeout"))
+
+      await expect(
+        service.refundPayment({
+          amount: 250,
+          data: { razorpay_payment_id: "pay_123" },
+        })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          type: MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
+          message: expect.stringContaining("Failed to refund Razorpay payment pay_123"),
+        })
+      )
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        "[Razorpay] Failed to refund payment pay_123: Gateway timeout"
+      )
+      // Verify no secrets or sensitive options logged
+      expect(mockLogger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining("test_secret_key_abcdef")
+      )
+    })
+
+    it("performs partial refund successfully with receipt and notes for idempotency", async () => {
+      mockPaymentsFetch.mockResolvedValueOnce({
+        id: "pay_123",
+        amount: 50000,
+        amount_refunded: 0,
+        status: "captured",
+      })
       mockPaymentsRefund.mockResolvedValueOnce({
-        id: "rfnd_123",
-        amount: 25000,
+        id: "rfnd_part_123",
+        payment_id: "pay_123",
+        amount: 20000,
+        status: "processed",
       })
 
       const res = await service.refundPayment({
-        amount: 250,
-        data: { razorpay_payment_id: "pay_123" },
+        amount: 200,
+        data: {
+          razorpay_payment_id: "pay_123",
+          refund_id: "ref_item_999",
+        },
+        context: {
+          idempotency_key: "idem_partial_123",
+        },
       })
 
       expect(mockPaymentsRefund).toHaveBeenCalledWith("pay_123", {
-        amount: 25000,
+        amount: 20000,
+        receipt: "idem_partial_123",
+        notes: {
+          payment_id: "pay_123",
+          receipt: "idem_partial_123",
+          medusa_refund_id: "ref_item_999",
+        },
       })
-      expect((res.data as any)?.refund?.id).toBe("rfnd_123")
+      expect((res.data as any)?.refund?.id).toBe("rfnd_part_123")
+    })
+
+    it("performs full refund successfully with receipt and notes for idempotency", async () => {
+      mockPaymentsFetch.mockResolvedValueOnce({
+        id: "pay_123",
+        amount: 50000,
+        amount_refunded: 0,
+        status: "captured",
+      })
+      mockPaymentsRefund.mockResolvedValueOnce({
+        id: "rfnd_full_123",
+        payment_id: "pay_123",
+        amount: 50000,
+        status: "processed",
+      })
+
+      const res = await service.refundPayment({
+        amount: 500,
+        data: {
+          razorpay_payment_id: "pay_123",
+          refund_id: "ref_order_full",
+        },
+      })
+
+      expect(mockPaymentsRefund).toHaveBeenCalledWith("pay_123", {
+        amount: 50000,
+        receipt: "ref_order_full",
+        notes: {
+          payment_id: "pay_123",
+          receipt: "ref_order_full",
+          medusa_refund_id: "ref_order_full",
+        },
+      })
+      expect((res.data as any)?.refund?.id).toBe("rfnd_full_123")
     })
   })
 
