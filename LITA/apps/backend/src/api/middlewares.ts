@@ -49,13 +49,16 @@ const UpdateItem = z.object({
 })
 
 export const PostTradeApplicationSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Valid email is required"),
-  company: z.string().optional().nullable(),
-  role: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
-  website: z.string().optional().nullable(),
-  message: z.string().optional().nullable(),
+  name: z.string().trim().min(1, "Name is required").max(120, "Name cannot exceed 120 characters"),
+  email: z.string().trim().toLowerCase().pipe(z.string().email("Valid email is required")),
+  company: z.string().trim().max(120, "Company cannot exceed 120 characters").optional().nullable(),
+  role: z.string().trim().max(100, "Role cannot exceed 100 characters").optional().nullable(),
+  phone: z.string().trim().max(10, "Phone cannot exceed 10 characters").optional().nullable(),
+  website: z.preprocess(
+    (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
+    z.string().trim().max(100, "Website cannot exceed 100 characters").url("Website must be a valid URL").optional().nullable()
+  ),
+  message: z.string().trim().max(4000, "Message cannot exceed 4000 characters").optional().nullable(),
 })
 
 export const UpdateTradeApplicationSchema = z.object({
@@ -114,9 +117,7 @@ export default defineMiddlewares({
       matcher: "/store/trade-applications",
       method: "GET",
       middlewares: [
-        authenticate("customer", ["bearer", "session"], {
-          allowUnauthenticated: true,
-        }),
+        authenticate("customer", ["bearer", "session"]),
       ],
     },
     {

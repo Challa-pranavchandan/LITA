@@ -971,6 +971,11 @@ export function AccountDashboard({
           setTradeModalOpen(false);
           router.refresh();
         }}
+        initialName={[customer.first_name, customer.last_name].filter(Boolean).join(" ")}
+        initialEmail={customer.email}
+        initialPhone={customer.phone || undefined}
+        initialCompany={tradeApplication?.company || undefined}
+        initialRole={tradeApplication?.role || undefined}
       />
     </div>
   );

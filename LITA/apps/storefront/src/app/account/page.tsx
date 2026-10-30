@@ -20,7 +20,7 @@ export default async function AccountPage() {
 
   const [orders, tradeApplication, commissions] = await Promise.all([
     listOrders(),
-    getCustomerTradeApplication(customer.email),
+    getCustomerTradeApplication(),
     getCustomerCommissions(),
   ]);
 

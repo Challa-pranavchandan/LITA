@@ -3,25 +3,27 @@ import { getAuthHeaders } from "@/lib/data/customer";
 
 export type TradeApplication = {
   id: string;
-  name: string;
-  email: string;
+  status: "pending" | "approved" | "rejected";
   company: string | null;
   role: string | null;
-  phone: string | null;
-  website: string | null;
   message: string | null;
-  status: "pending" | "approved" | "rejected";
   created_at: string;
+  updated_at?: string;
+  name?: string;
+  email?: string;
+  phone?: string | null;
+  website?: string | null;
 };
 
-export async function getCustomerTradeApplication(
-  email?: string | null
-): Promise<TradeApplication | null> {
+export async function getCustomerTradeApplication(): Promise<TradeApplication | null> {
   try {
     const authHeaders = await getAuthHeaders();
-    const query = email ? `?email=${encodeURIComponent(email)}` : "";
+    if (!authHeaders.authorization) {
+      return null;
+    }
+
     const res = await sdk.client.fetch<{ application: TradeApplication | null }>(
-      `/store/trade-applications${query}`,
+      "/store/trade-applications",
       {
         method: "GET",
         headers: authHeaders,

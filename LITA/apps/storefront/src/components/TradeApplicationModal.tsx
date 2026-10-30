@@ -7,6 +7,10 @@ interface TradeModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialRole?: string;
+  initialName?: string;
+  initialEmail?: string;
+  initialPhone?: string;
+  initialCompany?: string;
 }
 
 const ROLES = [
@@ -18,7 +22,15 @@ const ROLES = [
   "Other",
 ];
 
-export function TradeApplicationModal({ isOpen, onClose, initialRole }: TradeModalProps) {
+export function TradeApplicationModal({
+  isOpen,
+  onClose,
+  initialRole,
+  initialName,
+  initialEmail,
+  initialPhone,
+  initialCompany,
+}: TradeModalProps) {
   const [selectedRole, setSelectedRole] = useState(initialRole || "Interior Designer");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -199,6 +211,7 @@ export function TradeApplicationModal({ isOpen, onClose, initialRole }: TradeMod
                     name="name"
                     type="text"
                     required
+                    defaultValue={initialName}
                     placeholder="e.g. Eleanor Vance"
                     className="w-full border border-[#D5D5D5] bg-[#FAF9F7] px-3.5 py-2.5 text-sm text-[#111111] focus:border-[#111111] focus:bg-white focus:outline-none transition-colors"
                   />
@@ -212,6 +225,7 @@ export function TradeApplicationModal({ isOpen, onClose, initialRole }: TradeMod
                     name="company"
                     type="text"
                     required
+                    defaultValue={initialCompany}
                     placeholder="e.g. Vance Interiors LLC"
                     className="w-full border border-[#D5D5D5] bg-[#FAF9F7] px-3.5 py-2.5 text-sm text-[#111111] focus:border-[#111111] focus:bg-white focus:outline-none transition-colors"
                   />
@@ -229,6 +243,7 @@ export function TradeApplicationModal({ isOpen, onClose, initialRole }: TradeMod
                     name="email"
                     type="email"
                     required
+                    defaultValue={initialEmail}
                     placeholder="name@company.com"
                     className="w-full border border-[#D5D5D5] bg-[#FAF9F7] px-3.5 py-2.5 text-sm text-[#111111] focus:border-[#111111] focus:bg-white focus:outline-none transition-colors"
                   />
@@ -241,6 +256,7 @@ export function TradeApplicationModal({ isOpen, onClose, initialRole }: TradeMod
                     id="trade-phone"
                     name="phone"
                     type="tel"
+                    defaultValue={initialPhone}
                     placeholder="+1 (555) 000-0000"
                     className="w-full border border-[#D5D5D5] bg-[#FAF9F7] px-3.5 py-2.5 text-sm text-[#111111] focus:border-[#111111] focus:bg-white focus:outline-none transition-colors"
                   />

@@ -381,6 +381,15 @@
     - **Environment Documentation:** Replaced the real-looking secret in `apps/storefront/.env.example` and `.env.template` with `replace-with-32-plus-random-chars` and documented token generation command. Added `REVALIDATE_SECRET` with generator instructions to `apps/backend/.env.example` and `apps/backend/.env.template`.
     - **Automated Tests:** Created unit test suite `apps/storefront/src/__tests__/revalidate-auth.test.js` (9 passing tests) verifying unset env, empty env, short env, missing provided values, wrong values, valid secrets, route POST-only integrity, and regression testing ensuring the previous `undefined === undefined` authentication bypass cannot occur.
 
+28. **B3 — Trade Application Data Leak Fix & Hardening:**
+    - **Authentication Enforcement:** Removed `allowUnauthenticated: true` from `apps/backend/src/api/middlewares.ts` on `GET /store/trade-applications`, strictly requiring valid customer `bearer` or `session` authentication via Medusa's `authenticate` middleware.
+    - **Query-Level Case-Insensitive Filtering:** Removed the unauthenticated `?email=` query parameter entirely. Customer identity is resolved from `auth_context.actor_id` and verified through Medusa's Customer module. Database queries are executed with `$ilike` against the customer email directly in the query, preventing memory filtering overflows and guaranteeing correct results regardless of table size (> 100 rows).
+    - **Safe Customer Projection:** Mapped returned application objects to only customer-safe fields (`id`, `status`, `company`, `role`, `message`, `created_at`, `updated_at`), stripping internal notes and sensitive unneeded attributes.
+    - **Input Validation & Deduplication:** Tightened `PostTradeApplicationSchema` (trimmed and lowercased email, max lengths: name 120, company 120, role 100, phone 30, website 200 with URL validation, message 4000). On `POST`, lowercases the email and returns `200` with the existing record if a pending application already exists, preventing duplicate submissions. Added marked TODO for B6 shared rate limiter and captcha.
+    - **Workflow Integration:** Encapsulated business logic into `listCustomerTradeApplicationsWorkflow` and `createTradeApplicationWorkflow` in `apps/backend/src/workflows/trade-applications.ts`.
+    - **Storefront & Prefill Integration:** Updated `apps/storefront/src/lib/data/trade.ts` (`getCustomerTradeApplication`) to remove the email argument and supply customer authorization headers. Updated caller in `apps/storefront/src/app/account/page.tsx`. Added prefill props to `TradeApplicationModal.tsx` and wired customer details prefill in `AccountDashboard.tsx`.
+    - **Automated Tests:** Added 15 backend unit tests in `apps/backend/src/api/store/trade-applications/__tests__/trade-applications.unit.spec.ts` and 4 storefront tests in `apps/storefront/src/__tests__/trade.test.js`. All 38 storefront tests and 15 backend tests pass.
+
 ---
 
 ## 6. Production Readiness Audit (30 Oct 2026)
@@ -398,7 +407,7 @@ Status legend: `BLOCKER` = must fix before taking real money. `SHOULD` = fix bef
 | Catalog, cart, browsing, ISR | DONE (needs hardening) | Works; dead starter code deleted (CP0) |
 | Razorpay payments | BLOCKER | Strong core; manual-payment path, refund no-op, go-live steps and CSP still open |
 | Auth & accounts | SHOULD | Works; rate limiting is in-memory only; magic link not built |
-| Commissions / Trade / Feedback | BLOCKER | Trade lookup leaks PII by email; commission-to-payment path undefined |
+| Commissions / Trade / Feedback | BLOCKER | Trade lookup hardened (B3 resolved); commission-to-payment path undefined |
 | Email & notifications | DONE (CP3) | Notification module + Resend provider live; order, trade, commission emails sent; studio inbox, newsletter and domain SPF/DKIM pending |
 | Security & edge | BLOCKER | Revalidate auth bypass, CSP report-only, no WAF/rate limits |
 | Infrastructure & ops | BLOCKER | No Redis modules, no Docker/CI, no monitoring, no backup plan, wrong DB region |
@@ -427,9 +436,13 @@ Resolved across storefront route, backend subscribers, and configuration guards:
 - Environment files updated with safe placeholders and generator comments.
 - 9 unit tests passing in `apps/storefront/src/__tests__/revalidate-auth.test.js`.
 
-**B3. Trade application lookup leaks personal data.**
-`GET /store/trade-applications?email=...` (`apps/backend/src/api/store/trade-applications/route.ts`) accepts an unauthenticated email and returns that person's name, phone, company and message. The publishable key is public, so anyone can enumerate. It also fetches only the newest 100 rows and filters in memory, so results go wrong once there are more than 100.
-Fix: require customer auth (drop the `?email=` path), filter by email in the query, add rate limiting and validation on `POST`.
+**B3. Trade application lookup leaks personal data. (RESOLVED)**
+Resolved across backend routing, middleware authentication, transactional workflows, storefront data fetching, and prefill:
+- `GET /store/trade-applications`: Requires customer authentication via `authenticate("customer", ["bearer", "session"])` (removed `allowUnauthenticated`). Resolves customer from `auth_context.actor_id` and queries Supabase Postgres with `{ email: { $ilike: customer.email } }` in the query (not in memory). Projections return only safe fields (`id`, `status`, `company`, `role`, `message`, `created_at`, `updated_at`).
+- `POST /store/trade-applications`: Validates with tightened `PostTradeApplicationSchema` (trimmed/lowercased email, max lengths, valid URL on website). Normalizes email to lowercase and reuses existing pending application (returning 200) rather than creating duplicates.
+- Workflows: Business logic moved into `listCustomerTradeApplicationsWorkflow` and `createTradeApplicationWorkflow`.
+- Storefront: Updated `getCustomerTradeApplication` to pass auth headers without `?email=` query. Updated `account/page.tsx` and prefilled `TradeApplicationModal` in `AccountDashboard.tsx`.
+- Verified with 15 backend unit tests and 4 storefront unit tests.
 
 **B4. Medusa runs on in-memory infrastructure.**
 `.env.example` lists `REDIS_URL`, but `medusa-config.ts` registers no Redis modules. In production that means the in-process event bus (events lost on restart, including the Razorpay webhook recovery subscriber), non-durable workflow runs, and no cross-instance locking (storefront cart completion and webhook recovery can race).
@@ -563,6 +576,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **CP3 — Transactional emails:** Notification module + custom Resend provider, order placed and fulfilled emails, trade and commission status emails, hardened production logging (section 5 item 24)
 - [x] **B1 — Remove manual payment path:** Storefront UI + server-side action guards, check:prod-config backend validation script, SEED_DEMO_DATA guard, 25 unit tests passed (section 5 item 26)
 - [x] **B2 — Hardening ISR revalidate endpoint:** constant-time verification, header-preferred POST-only route, Medusa production startup guard, backend subscriber header auth, 9 unit tests passed (section 5 item 27)
+- [x] **B3 — Trade application data leak:** require customer authentication on GET, query-level case-insensitive filtering ($ilike) without in-memory limits, safe field projection, deduplication on POST, 15 backend unit tests + 4 storefront unit tests passed (section 5 item 28)
 
 ### CP0 - Clean baseline (COMPLETE — exit test passed)
 - [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
@@ -578,7 +592,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 ### CP1 - Security fixes
 - [x] Remove/gate `pp_system_default` (B1)
 - [x] Fix revalidate auth, drop GET, rotate secret, add to backend env (B2)
-- [ ] Require auth on trade lookup and filter in query (B3)
+- [x] Require auth on trade lookup and filter in query (B3)
 - [ ] Strip `webhook_verified` and client `razorpay_order_id` from client data (B8)
 - [ ] Make `refundPayment` throw when no payment id (B8)
 - [ ] Reject non-INR in `initiatePayment` (B8)
