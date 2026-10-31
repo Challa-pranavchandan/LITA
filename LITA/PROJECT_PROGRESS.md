@@ -440,6 +440,22 @@
       - Created dedicated landing pages: `/newsletter/confirmed`, `/newsletter/unsubscribed`, and confirmation proxy handler `/newsletter/confirm/route.ts`.
     - **Automated Tests:** 16 backend unit tests passing in `apps/backend/src/__tests__/inquiries.unit.spec.ts` and 14 storefront unit tests passing in `apps/storefront/src/__tests__/inquiry-forms.test.js`.
 
+32. **B10 — Commission Payment Path with Razorpay Modal & Webhook Reconciliation (RESOLVED — CP2):**
+    - **Architecture & Business Rules:** Implemented Option A (Standard Razorpay Checkout Modal). Pricing is strictly all-inclusive (artwork, museum packaging, insured domestic shipping, GST). Lifecycle status flow: `new` -> `in_discussion` -> `quoted` -> `accepted` -> `awaiting_payment` -> `paid` (also gracefully supporting existing `converted` records).
+    - **Database Migration:** Generated and applied migration `Migration20261031054013.ts` to Supabase PostgreSQL: added `awaiting_payment` and `paid` to `commission.status` enum; added nullable `paid_at` (`timestamptz`) and `payment_reference` (`text`).
+    - **Draft Order & Payment Collection:** Updated `convert-commission-to-order.ts` to invoke `createOrderPaymentCollectionWorkflow` binding an `order_payment_collection` with the exact server-side `quoted_price`, transition commission to `awaiting_payment`, and rollback payment collection if conversion fails.
+    - **Session Initiation Workflow:** Created `apps/backend/src/workflows/create-commission-payment-session.ts` with customer ownership checks, status guards (`awaiting_payment` / `converted`), server-side price enforcement (client cannot manipulate amount), and `createPaymentSessionsWorkflow` using `pp_razorpay_razorpay`.
+    - **Payment Completion Workflow:** Created `apps/backend/src/workflows/complete-commission-payment.ts`: enriches payment session with Razorpay payment/order/signature or webhook verification flag, captures payment via `capturePaymentWorkflow`, records transaction via `addOrderTransactionStep`, converts draft order to placed order via `convertDraftOrderWorkflow` (triggering `order.placed`), transitions commission to `paid` with timestamp and payment reference, and emits `commission.status_changed` and `commission.payment_received`.
+    - **Asynchronous Webhook Reconciliation:** Enhanced `reconcile-razorpay-order.ts` to query `order_payment_collection` as an immediate fallback when `cart_payment_collection` is absent, automatically recovering and placing commission orders if a customer closes their tab after payment.
+    - **Storefront Payment Experience:**
+      - Added Server Actions `initCommissionPaymentSession(id)` and `completeCommissionPayment(id, payload)` in `apps/storefront/src/lib/data/commission.ts`.
+      - Built client component `CommissionPayButton.tsx` loading official Razorpay Checkout SDK, launching modal with brand color `#5f2f3c`, showing prefilled customer details, and managing confirmation/success/failure states.
+      - Built dedicated checkout page `/account/commissions/[id]/pay` with artwork specifications, studio notes, all-inclusive price breakdown, and 256-bit encrypted checkout.
+      - Integrated Pay button and Paid badge into `/account` (`AccountDashboard.tsx`) under Commissions tab.
+    - **Email & Notifications:** Updated Resend templates and `commission-status-changed.ts` subscriber to dispatch branded notifications on `awaiting_payment` and `paid`.
+    - **Admin Dashboard Integration:** Updated Admin Commissions interface (`apps/backend/src/admin/routes/commissions/page.tsx`) with status color badges, filter dropdowns, payment reference, and order links.
+    - **Automated Tests:** 13 backend unit tests in `commission-payment.unit.spec.ts` (route guards, server amount calculation, 401/404/409/400 handling, collection reconciliation) and 5 storefront unit tests in `commission-payment.test.js`. Full repo verification passed (`npm run lint`, `npm test`, `npm run build`).
+
 ---
 
 
@@ -553,8 +569,8 @@ Still open:
 - The India region lives in your database (created in Admin), so I could not see its tax setup. The repo only seeds a Europe/EUR region with the generic `tp_system` tax provider. Check in Admin that the India region has the right tax region and rates, and decide with your CA: tax-inclusive pricing, HSN/GST rates, whether you need state-wise CGST/SGST vs IGST, and the invoice format.
 - India-specific items usually expected for an online store: seller and grievance officer details, consent wording for personal data, GST invoice on every order. Confirm the exact list with a lawyer.
 
-**B10. Unclear payment path for commissions.**
-Accepted commissions become draft orders (`convert-commission-to-order.ts`), but nothing lets the customer pay for a draft order. The guide only says "confirm the draft order or send a payment link". Decide: Razorpay Payment Link, or convert to a normal cart/payment collection, and whether you take an advance.
+**B10. Commission payment path (RESOLVED — CP2).**
+Accepted commissions become draft orders linked to an `order_payment_collection` via `convert-commission-to-order.ts` and are marked `awaiting_payment`. Customers securely pay via Razorpay modal directly from `/account` or `/account/commissions/[id]/pay`. `complete-commission-payment.ts` captures the payment, converts draft orders to placed orders, stamps `paid_at`, and triggers confirmation emails. Pay-then-close-tab events are recovered via `reconcile-razorpay-order.ts`.
 
 ---
 
@@ -676,7 +692,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Test matrix in Razorpay test mode: success, failed, cancelled, closed tab, double click, amount change after order creation, expired order
 - [ ] Verify webhook retries are idempotent (same event twice)
 - [ ] Decide refund policy and document "refund only from Medusa Admin"
-- [ ] Decide commission payment path (payment link or cart) and build it (B10)
+- [x] Decide commission payment path (payment link or cart) and build it (B10)
 - [ ] Add Razorpay hosts to CSP and test in report-only first (S1)
 
 ### CP3 - Email and notifications (PARTIALLY COMPLETE — see B5 & B6)

@@ -26,7 +26,15 @@ export default async function commissionStatusChangedHandler({
   }
 
   // Only dispatch for notable customer-facing statuses
-  const notifiedStatuses = ["quoted", "accepted", "converted", "rejected", "cancelled"]
+  const notifiedStatuses = [
+    "quoted",
+    "accepted",
+    "awaiting_payment",
+    "converted",
+    "paid",
+    "rejected",
+    "cancelled",
+  ]
   const normalizedStatus = data.status.toLowerCase().trim()
   if (!notifiedStatuses.includes(normalizedStatus)) {
     logger.debug(

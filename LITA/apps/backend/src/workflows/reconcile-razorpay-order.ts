@@ -69,8 +69,46 @@ export const reconcileSessionStep = createStep(
 
     const cartId = cartPaymentCollections?.[0]?.cart_id
     if (!cartId) {
+      // Check if this payment collection is linked to an order
+      const { data: orderPaymentCollections } = await query.graph({
+        entity: "order_payment_collection",
+        fields: ["order_id"],
+        filters: { payment_collection_id: session.payment_collection_id },
+      })
+
+      const orderId = orderPaymentCollections?.[0]?.order_id
+      if (orderId) {
+        logger.info(
+          `[reconcile-razorpay-order] Found order payment collection for order ${orderId}. Reconciling order payment directly.`
+        )
+        try {
+          const { completeCommissionPaymentWorkflow } = await import(
+            "./complete-commission-payment.js"
+          )
+          await completeCommissionPaymentWorkflow(container).run({
+            input: {
+              session_id: session.id,
+              razorpay_payment_id: input.payment_id,
+              razorpay_order_id: input.order_id || "",
+              webhook_verified: true,
+            },
+          })
+          logger.info(
+            `[reconcile-razorpay-order] Successfully reconciled commission order payment for order ${orderId}.`
+          )
+        } catch (orderErr: any) {
+          logger.error(
+            `[reconcile-razorpay-order] Failed to reconcile order payment for ${orderId}: ${orderErr?.message || orderErr}`
+          )
+        }
+        return new StepResponse(
+          { shouldComplete: false, cart_id: "" },
+          { session_id: "", previousData: {} }
+        )
+      }
+
       logger.warn(
-        `[reconcile-razorpay-order] No cart linked to payment collection ${session.payment_collection_id}.`
+        `[reconcile-razorpay-order] No cart or order linked to payment collection ${session.payment_collection_id}.`
       )
       return new StepResponse(
         { shouldComplete: false, cart_id: "" },

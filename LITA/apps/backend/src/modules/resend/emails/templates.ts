@@ -406,6 +406,7 @@ export function commissionStatusTemplate(data: CommissionStatusTemplateData): {
         </div>`
       break
     }
+    case "awaiting_payment":
     case "converted": {
       subject = `Order Ready for Payment: "${data.title}" — Livin In The Art`
       headerText = "Commission Order Created"
@@ -419,6 +420,23 @@ export function commissionStatusTemplate(data: CommissionStatusTemplateData): {
         <div style="margin: 28px 0; text-align: left;">
           <a href="${commissionsUrl}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">
             Complete Commission Payment
+          </a>
+        </div>`
+      break
+    }
+    case "paid": {
+      subject = `Payment Confirmed: "${data.title}" — Livin In The Art`
+      headerText = "Commission Payment Received"
+      bodyContent = `
+        <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+          ${data.customerName ? `Dear ${escapeHtml(data.customerName)}, ` : ""}We have received your payment of <strong>${data.quotedPrice ? formatCurrency(data.quotedPrice, currency) : ""}</strong> for your commissioned artwork <strong>"${escapeHtml(data.title)}"</strong>.
+        </p>
+        <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+          The studio will now proceed with creating your bespoke piece. You can track updates and discussion anytime in your account.
+        </p>
+        <div style="margin: 28px 0; text-align: left;">
+          <a href="${commissionsUrl}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">
+            View Commission in Account
           </a>
         </div>`
       break

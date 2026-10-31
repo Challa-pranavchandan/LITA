@@ -168,6 +168,8 @@
             "in_discussion",
             "quoted",
             "accepted",
+            "awaiting_payment",
+            "paid",
             "converted",
             "rejected",
             "cancelled"
@@ -253,6 +255,38 @@
           "comment": null,
           "enumItems": [],
           "mappedType": "json"
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "payment_reference": {
+          "name": "payment_reference",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "text"
         },
         "created_at": {
           "name": "created_at",

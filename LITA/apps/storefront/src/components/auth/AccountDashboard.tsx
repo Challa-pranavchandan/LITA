@@ -20,6 +20,7 @@ import {
   useFollowedArtists,
   toggleFollowArtist,
 } from "@/lib/followed-artists";
+import CommissionPayButton from "@/components/commission/CommissionPayButton";
 
 interface AccountDashboardProps {
   customer: HttpTypes.StoreCustomer;
@@ -935,30 +936,67 @@ export function AccountDashboard({
             </div>
 
             <div className="divide-y divide-[#eeeeee]">
-              {commissions.map((c) => (
-                <div key={c.id} className="py-4 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-[14px] text-[#222222]">
-                        Commission #{c.id.slice(0, 8)}
-                      </span>
-                      <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 bg-neutral-100 text-neutral-700">
-                        {c.status}
-                      </span>
+              {commissions.map((c) => {
+                const canPay = c.status === "awaiting_payment" || c.status === "converted";
+                const isPaid = c.status === "paid" || !!c.paid_at;
+
+                return (
+                  <div key={c.id} className="py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-[14px] text-[#222222]">
+                          Commission #{c.id.slice(0, 8)}
+                        </span>
+                        <span
+                          className={`text-[11px] uppercase tracking-wider px-2 py-0.5 ${
+                            isPaid
+                              ? "bg-emerald-100 text-emerald-800"
+                              : canPay
+                              ? "bg-amber-100 text-amber-800 font-medium"
+                              : "bg-neutral-100 text-neutral-700"
+                          }`}
+                        >
+                          {c.status.replace("_", " ")}
+                        </span>
+                      </div>
+                      {c.title && (
+                        <p className="text-xs text-[#555555] font-medium">{c.title}</p>
+                      )}
+                      {c.quoted_price ? (
+                        <p className="text-xs text-[#777777]">
+                          Quoted: {formatMoney(c.quoted_price, c.currency_code || "INR")} (All-inclusive)
+                        </p>
+                      ) : (
+                        <span className="text-xs text-[#888888]">In review</span>
+                      )}
                     </div>
-                    {c.title && (
-                      <p className="text-xs text-[#666666] mt-0.5">{c.title}</p>
-                    )}
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      {canPay && (
+                        <CommissionPayButton
+                          commission={c}
+                          customer={customer}
+                          onSuccess={() => {
+                            router.refresh();
+                          }}
+                        />
+                      )}
+                      {isPaid && (
+                        <span className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded inline-block">
+                          Paid · {c.order_id ? `Order #${c.order_id.slice(-6).toUpperCase()}` : "Confirmed"}
+                        </span>
+                      )}
+                      <Link
+                        href={`/account/commissions/${c.id}/pay`}
+                        className="text-xs underline text-neutral-600 hover:text-black whitespace-nowrap"
+                        onClick={() => setCommissionsModalOpen(false)}
+                      >
+                        View Details →
+                      </Link>
+                    </div>
                   </div>
-                  {c.quoted_price ? (
-                    <span className="text-[14px] font-medium text-[#222222]">
-                      {formatMoney(c.quoted_price, c.currency_code || "INR")}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-[#888888]">In review</span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

@@ -198,6 +198,20 @@ export default defineMiddlewares({
       ],
     },
     {
+      matcher: "/store/commissions/*/payment-session",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("commission_pay_session", 10, 15 * 60 * 1000),
+      ],
+    },
+    {
+      matcher: "/store/commissions/*/pay",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("commission_pay", 10, 15 * 60 * 1000),
+      ],
+    },
+    {
       matcher: "/store/commissions",
       middlewares: [
         authenticate("customer", ["bearer", "session"], {

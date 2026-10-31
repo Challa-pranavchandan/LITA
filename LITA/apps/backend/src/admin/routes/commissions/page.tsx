@@ -48,6 +48,8 @@ export type Commission = {
     | "in_discussion"
     | "quoted"
     | "accepted"
+    | "awaiting_payment"
+    | "paid"
     | "converted"
     | "rejected"
     | "cancelled"
@@ -57,6 +59,8 @@ export type Commission = {
   order_id: string | null
   images: CommissionImage[] | null
   created_at: string
+  paid_at?: string | null
+  payment_reference?: string | null
   customer?: {
     id: string
     email: string
@@ -71,6 +75,8 @@ const statusBadgeColor: Record<string, "purple" | "blue" | "orange" | "green" | 
   in_discussion: "blue",
   quoted: "orange",
   accepted: "green",
+  awaiting_payment: "orange",
+  paid: "green",
   converted: "green",
   rejected: "red",
   cancelled: "grey",
@@ -81,6 +87,8 @@ const statusLabels: Record<string, string> = {
   in_discussion: "In Discussion",
   quoted: "Quoted",
   accepted: "Quote Accepted",
+  awaiting_payment: "Awaiting Payment",
+  paid: "Paid",
   converted: "Converted to Order",
   rejected: "Rejected",
   cancelled: "Cancelled",
@@ -411,9 +419,19 @@ const CommissionsPage = () => {
               {/* Convert to Order Action */}
               {selectedCommission.order_id ? (
                 <div className="flex items-center gap-2">
-                  <Badge size="small" color="green">
-                    Converted to Order
+                  <Badge
+                    size="small"
+                    color={selectedCommission.status === "paid" ? "green" : "orange"}
+                  >
+                    {selectedCommission.status === "paid"
+                      ? "Paid"
+                      : "Awaiting Payment"}
                   </Badge>
+                  {selectedCommission.payment_reference && (
+                    <span className="font-mono text-xs text-ui-fg-muted">
+                      Ref: {selectedCommission.payment_reference}
+                    </span>
+                  )}
                   <Button
                     size="small"
                     variant="secondary"
@@ -608,6 +626,8 @@ const CommissionsPage = () => {
                         <Select.Item value="in_discussion">In Discussion</Select.Item>
                         <Select.Item value="quoted">Quoted</Select.Item>
                         <Select.Item value="accepted">Quote Accepted</Select.Item>
+                        <Select.Item value="awaiting_payment">Awaiting Payment</Select.Item>
+                        <Select.Item value="paid">Paid</Select.Item>
                         <Select.Item value="converted">Converted to Order</Select.Item>
                         <Select.Item value="rejected">Rejected</Select.Item>
                         <Select.Item value="cancelled">Cancelled</Select.Item>

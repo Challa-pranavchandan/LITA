@@ -39,6 +39,8 @@ export type Commission = {
     | "in_discussion"
     | "quoted"
     | "accepted"
+    | "awaiting_payment"
+    | "paid"
     | "converted"
     | "rejected"
     | "cancelled";
@@ -48,6 +50,20 @@ export type Commission = {
   order_id: string | null;
   images: CommissionImage[] | null;
   created_at: string;
+  paid_at?: string | null;
+  payment_reference?: string | null;
+};
+
+export type CommissionPaymentSessionData = {
+  commission_id: string;
+  order_id: string;
+  payment_collection_id: string;
+  session_id: string;
+  razorpay_order_id: string;
+  amount: number;
+  currency_code: string;
+  key_id: string;
+  title: string;
 };
 
 /**
@@ -232,3 +248,72 @@ export async function sendCommissionMessage(
     };
   }
 }
+
+/**
+ * Initialize a Razorpay payment session for an accepted commission order
+ */
+export async function initCommissionPaymentSession(
+  id: string
+): Promise<{ ok: boolean; sessionData?: CommissionPaymentSessionData; error?: string }> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    if (!authHeaders.authorization) {
+      return { ok: false, error: "Authentication required." };
+    }
+
+    const res = await sdk.client.fetch<CommissionPaymentSessionData>(
+      `/store/commissions/${id}/payment-session`,
+      {
+        method: "POST",
+        headers: authHeaders,
+      }
+    );
+
+    return { ok: true, sessionData: res };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: getErrorMessage(err, "Failed to initialize payment session."),
+    };
+  }
+}
+
+/**
+ * Complete and verify payment after Razorpay modal succeeds
+ */
+export async function completeCommissionPayment(
+  id: string,
+  payload: {
+    session_id: string;
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  }
+): Promise<{ ok: boolean; commission?: Commission; order?: Record<string, unknown>; error?: string }> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    if (!authHeaders.authorization) {
+      return { ok: false, error: "Authentication required." };
+    }
+
+    const res = await sdk.client.fetch<{
+      success: boolean;
+      commission: Commission;
+      order: Record<string, unknown>;
+    }>(`/store/commissions/${id}/pay`, {
+      method: "POST",
+      headers: authHeaders,
+      body: payload,
+    });
+
+    revalidatePath("/account");
+    revalidatePath(`/account/commissions/${id}/pay`);
+    return { ok: true, commission: res.commission, order: res.order };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: getErrorMessage(err, "Failed to verify payment with studio."),
+    };
+  }
+}
+

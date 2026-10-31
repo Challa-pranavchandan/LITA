@@ -5,7 +5,10 @@ import {
   WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
 import { Modules, OrderStatus } from "@medusajs/framework/utils"
-import { createOrderWorkflow } from "@medusajs/core-flows"
+import {
+  createOrderPaymentCollectionWorkflow,
+  createOrderWorkflow,
+} from "@medusajs/core-flows"
 import { COMMISSION_MODULE } from "../modules/commission"
 import CommissionModuleService from "../modules/commission/service"
 
@@ -156,7 +159,39 @@ export const createCommissionDraftOrderStep = createStep(
   }
 )
 
-/* ---------------- STEP 4: Update Commission Converted Status ---------------- */
+/* ---------------- STEP 4: Create Order Payment Collection ---------------- */
+
+type CreatePaymentCollectionInput = {
+  order_id: string
+  amount: number | null
+}
+
+export const createCommissionPaymentCollectionStep = createStep(
+  "create-commission-payment-collection",
+  async ({ order_id, amount }: CreatePaymentCollectionInput, { container }) => {
+    const { result } = await createOrderPaymentCollectionWorkflow(container).run({
+      input: {
+        order_id,
+        amount: Number(amount || 0),
+      },
+    })
+    const paymentCollection = Array.isArray(result) ? result[0] : result
+    return new StepResponse(paymentCollection, paymentCollection?.id)
+  },
+  async (paymentCollectionId, { container }) => {
+    if (!paymentCollectionId) return
+    try {
+      const paymentModule: any = container.resolve(Modules.PAYMENT)
+      if (typeof paymentModule.deletePaymentCollections === "function") {
+        await paymentModule.deletePaymentCollections([paymentCollectionId])
+      }
+    } catch (err: any) {
+      console.warn(`[commissions] Failed to rollback payment collection ${paymentCollectionId}: ${err?.message}`)
+    }
+  }
+)
+
+/* ---------------- STEP 5: Update Commission Awaiting Payment Status ---------------- */
 
 type UpdateCommissionInput = {
   commission_id: string
@@ -171,9 +206,9 @@ export const updateCommissionConvertedStep = createStep(
 
     const updated = await commissionService.updateCommissions({
       id: commission_id,
-      status: "converted",
+      status: "awaiting_payment",
       order_id,
-      admin_notes: `Converted to Draft Order ${order_id}`,
+      admin_notes: `Converted to Draft Order ${order_id} - Awaiting Payment`,
     })
 
     try {
@@ -185,7 +220,7 @@ export const updateCommissionConvertedStep = createStep(
             id: updated.id,
             customer_id: updated.customer_id,
             title: updated.title,
-            status: "converted",
+            status: "awaiting_payment",
             previous_status: "accepted",
             quoted_price: updated.quoted_price,
             currency_code: updated.currency_code,
@@ -222,6 +257,10 @@ export const convertCommissionToOrderWorkflow = createWorkflow(
       commission,
       variant_id: variantInfo.variant_id,
     })
+    const paymentCollection = createCommissionPaymentCollectionStep({
+      order_id: draftOrder.id,
+      amount: commission.quoted_price,
+    })
     const updatedCommission = updateCommissionConvertedStep({
       commission_id: input.commission_id,
       order_id: draftOrder.id,
@@ -230,6 +269,7 @@ export const convertCommissionToOrderWorkflow = createWorkflow(
     return new WorkflowResponse({
       commission: updatedCommission,
       order: draftOrder,
+      payment_collection: paymentCollection,
     })
   }
 )

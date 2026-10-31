@@ -12,8 +12,13 @@ import {
   Toaster,
 } from "@medusajs/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import React, { useState } from "react"
 import { sdk } from "../../lib/sdk"
+
+// Cast Table.Cell to include TdHTMLAttributes (such as colSpan)
+const TableCell = Table.Cell as React.ForwardRefExoticComponent<
+  React.TdHTMLAttributes<HTMLTableCellElement> & React.RefAttributes<HTMLTableCellElement>
+>
 
 type Inquiry = {
   id: string
@@ -192,15 +197,15 @@ const InquiriesPage = () => {
           <Table.Body>
             {inquiriesLoading ? (
               <Table.Row>
-                <Table.Cell colSpan={6} className="text-center py-8 text-ui-fg-muted">
+                <TableCell colSpan={6} className="text-center py-8 text-ui-fg-muted">
                   Loading inquiries...
-                </Table.Cell>
+                </TableCell>
               </Table.Row>
             ) : inquiryData?.inquiries?.length === 0 ? (
               <Table.Row>
-                <Table.Cell colSpan={6} className="text-center py-8 text-ui-fg-muted">
+                <TableCell colSpan={6} className="text-center py-8 text-ui-fg-muted">
                   No inquiries found
-                </Table.Cell>
+                </TableCell>
               </Table.Row>
             ) : (
               inquiryData?.inquiries?.map((inq) => {
@@ -296,15 +301,15 @@ const InquiriesPage = () => {
           <Table.Body>
             {subscribersLoading ? (
               <Table.Row>
-                <Table.Cell colSpan={5} className="text-center py-8 text-ui-fg-muted">
+                <TableCell colSpan={5} className="text-center py-8 text-ui-fg-muted">
                   Loading subscribers...
-                </Table.Cell>
+                </TableCell>
               </Table.Row>
             ) : subscriberData?.subscribers?.length === 0 ? (
               <Table.Row>
-                <Table.Cell colSpan={5} className="text-center py-8 text-ui-fg-muted">
+                <TableCell colSpan={5} className="text-center py-8 text-ui-fg-muted">
                   No subscribers found
-                </Table.Cell>
+                </TableCell>
               </Table.Row>
             ) : (
               subscriberData?.subscribers?.map((sub) => (
