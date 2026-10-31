@@ -456,6 +456,29 @@
     - **Admin Dashboard Integration:** Updated Admin Commissions interface (`apps/backend/src/admin/routes/commissions/page.tsx`) with status color badges, filter dropdowns, payment reference, and order links.
     - **Automated Tests:** 13 backend unit tests in `commission-payment.unit.spec.ts` (route guards, server amount calculation, 401/404/409/400 handling, collection reconciliation) and 5 storefront unit tests in `commission-payment.test.js`. Full repo verification passed (`npm run lint`, `npm test`, `npm run build`).
 
+33. **Production-Grade Saved (Wishlist) Feature (Hybrid Store + Medusa Module):**
+    - **Custom Medusa v2 Wishlist Module:** Created custom module at `apps/backend/src/modules/wishlist/` with `WishlistItem` model (`customer_id`, `product_id`, composite unique index `(customer_id, product_id)`) using Medusa DML and `MedusaService`. Registered module in `medusa-config.ts`.
+    - **Database Migration:** Generated and executed migration `Migration20261031065846.ts` on Supabase PostgreSQL, persisting wishlist items to the `wishlist_item` table.
+    - **Customer Store API Endpoints:** Built authenticated routes under `apps/backend/src/api/store/customers/me/wishlist`:
+      - `GET /store/customers/me/wishlist`: Returns `{ product_ids }` newest first, capped at 200 items.
+      - `POST /store/customers/me/wishlist/items`: Adds item idempotently. Validates body `{ product_id }` with Zod, validates product existence against Medusa catalog (404 on missing), enforces 200 items limit (422), and emits `wishlist.item_added`.
+      - `DELETE /store/customers/me/wishlist/items/:product_id`: Deletes item idempotently and emits `wishlist.item_removed`.
+      - `POST /store/customers/me/wishlist/merge`: Merges guest IDs into customer account in batch, deduplicating IDs, filtering valid catalog products, skipping existing items, and enforcing 200 cap.
+      - Protected by `authenticate("customer", ["bearer", "session"])` and sliding-window rate limiting (`"wishlist"` action, 120 reqs/15m). Customer ID is strictly derived from `req.auth_context.actor_id`.
+    - **Storefront Hybrid Store & Optimistic UI:**
+      - Preserved public signatures in `apps/storefront/src/lib/saved.ts`: `useSaved(): string[]` and `toggleSaved(id: string)`.
+      - In guest mode: zero-friction persistence via browser `localStorage` under `"saved-artworks"` with cross-tab `storage` event synchronization.
+      - In logged-in mode: instant optimistic UI update with automatic rollback to previous state and gallery-aesthetic toast alert on network/server error.
+      - Merge on login: client component `SavedAuthSync.tsx` mounted in `Header.tsx` detects customer auth, merges guest local items into server wishlist, clears local storage, and syncs store cache.
+      - Device privacy on logout: resets in-memory cache to `[]` and wipes local storage so customer saves are never leaked on shared devices.
+    - **Storefront Toast Feedback:** Created zero-dependency `SavedToast.tsx` mounted in root `layout.tsx` displaying rollback and cap notifications.
+    - **Server Action & Catalog Hardening:**
+      - Updated `apps/storefront/src/app/saved/actions.ts` (`fetchSavedProducts`): validates input array, filters valid string IDs, deduplicates, and clamps query to 200.
+      - Updated `apps/storefront/src/lib/data/catalog.ts` (`listProductsByIds`): increased limit to 200 items.
+      - Updated `apps/storefront/src/components/SavedWorks.tsx`: detects unresolvable/deleted catalog products and automatically prunes them from customer wishlist in background.
+    - **Comprehensive Documentation:** Created `docs/saved-feature.md` covering architecture diagrams, data flow, API contracts, merge/logout semantics, security, and test coverage.
+    - **Automated Tests:** 13 backend unit tests in `apps/backend/src/api/store/customers/me/wishlist/__tests__/wishlist.unit.spec.ts` (all passed) and 8 storefront tests in `apps/storefront/src/__tests__/saved-feature.test.js` (all passed; 65/65 storefront suite passing).
+
 ---
 
 
@@ -474,9 +497,9 @@ Status legend: `BLOCKER` = must fix before taking real money. `SHOULD` = fix bef
 | Catalog, cart, browsing, ISR | DONE (needs hardening) | Works; dead starter code deleted (CP0) |
 | Razorpay payments | BLOCKER | Strong core; manual-payment path, refund no-op, go-live steps and CSP still open |
 | Auth & accounts | SHOULD | Works; rate limiting is in-memory only; magic link not built |
-| Commissions / Trade / Feedback | BLOCKER | Trade lookup hardened (B3 resolved); commission-to-payment path undefined |
+| Commissions / Trade / Feedback | DONE (B3 & B10 resolved) | Trade lookup hardened (B3); commission payment path live with Razorpay checkout & webhook recovery (B10) |
 | Email & notifications | DONE (CP3) | Notification module + Resend provider live; order, trade, commission emails sent; studio inbox, newsletter and domain SPF/DKIM pending |
-| Security & edge | BLOCKER | Revalidate auth bypass, CSP report-only, no WAF/rate limits |
+| Security & edge | PARTIALLY DONE | Revalidate auth hardened (B2), distributed rate limiting + Turnstile live (B6); CSP enforcement & feedback upload guard still open |
 | Infrastructure & ops | BLOCKER | No Redis modules, no Docker/CI, no monitoring, no backup plan, wrong DB region |
 | Build quality & tests | DONE (CP0) | Single lockfile, all imports declared, build/lint/test pass with zero ignored errors |
 | Legal, tax, content | BLOCKER | Privacy page names another brand, no GST setup, thin policies |
@@ -555,11 +578,12 @@ All items in the original blocker have been closed:
 **B8. Razorpay go-live and hardening.**
 Already built well (HMAC, API re-verification of amount/currency/order, replay check, webhook recovery).
 - **[RESOLVED — B8a]** `refundPayment` throws `MedusaError(INVALID_DATA)` when `razorpay_payment_id` is missing, verifies positive amounts against actual captured payments (`client_.payments.fetch`) and remaining balances, sends idempotency `receipt` (max 40 chars) and notes, and safely logs/throws `PAYMENT_AUTHORIZATION_ERROR` without exposing secrets (8 unit tests passed).
+- **[RESOLVED — B8b & B8c]** Data sanitization & currency guard in `RazorpayProviderService` (`apps/backend/src/modules/razorpay/service.ts`):
+  - **B8c (Currency Guard):** Strict upfront INR guard in both `initiatePayment` and `updatePayment`, throwing `MedusaError(INVALID_DATA, "Cannot initiate/update Razorpay payment: currency must be INR (received: ...)")` before contacting Razorpay APIs.
+  - **B8b (Data Sanitization & Webhook Bypass Prevention):** In `initiatePayment` and `updatePayment`, stripped client-supplied `razorpay_order_id`, `amount`, `currency`, and `webhook_verified`. `webhook_verified` is strictly only honored when called within an internal workflow context (`context.is_reconcile === true`), preventing malicious clients from injecting `webhook_verified: true` to bypass cryptographic HMAC verification. Updated `reconcile-razorpay-order.ts` and `complete-commission-payment.ts` to pass `context: { is_reconcile: true }` so authoritative webhook reconciliation succeeds. Verified with 52/52 passing unit tests in `razorpay-provider.unit.spec.ts`.
 Still open:
 - Complete KYC, enable auto-capture, live keys, live webhook with secret, 1 INR live test and refund test (from section 6 of the old roadmap).
-- `webhook_verified` (which skips the HMAC check) can be supplied by the browser through `initiatePaymentSession` data, because `updatePayment` spreads client data. Razorpay's API check still applies, so exploitation is hard, but only the reconcile workflow should be able to set it. Strip it, and strip client-supplied `razorpay_order_id` in the update path (B8b).
 - Replay protection uses `listPayments({ data: { razorpay_payment_id } })`. Verify that JSON filter really works against PostgreSQL with an integration test (B8d).
-- `initiatePayment` does not reject non-INR currencies (only `authorizePayment` does) (B8c).
 - `refund.processed` / `refund.failed` webhooks are ignored, so refunds made in the Razorpay dashboard will not show in Medusa. Document the rule "refund only from Medusa Admin" or add a logging subscriber (B8e).
 - CSP (see S1) must allow Razorpay before enforcement.
 
@@ -662,6 +686,8 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **B8a — Razorpay refund hardening:** throw on missing payment ID, validate amount against captured payment, ensure idempotency via receipt/notes, safe logging without secrets, 8 unit tests passed (section 5 item 29)
 - [x] **B4 — Redis infrastructure & worker mode:** event bus, workflow engine, distributed locking, caching, workerMode, production startup guard, docs/infrastructure.md, 14 unit tests passed (section 5 item 30)
 - [x] **B6 — Contact, inquiry & newsletter that never lose data:** Custom Medusa inquiry module, NewsletterSubscriber double opt-in, salted IP hashing, Resend studio & confirmation emails, Turnstile bot protection, honeypots, pluggable Upstash rate limiter with fail-closed production guard, Next.js /api/inquiry honest 502 proxy, Admin Inquiries & Newsletter dashboard, 16 backend + 14 storefront tests passed (section 5 item 31)
+- [x] **B10 — Commission payment path:** Accepted commissions convert to draft orders with order_payment_collection, Razorpay checkout modal from /account and dedicated /pay page, completeCommissionPayment workflow, auto-recovery via webhook reconciliation, 13 backend + 5 storefront tests passed (section 5 item 32)
+- [x] **Production-Grade Saved (Wishlist) feature:** Custom Medusa wishlist module, composite unique index, migration, authenticated Store API (GET, POST, DELETE, merge), hybrid guest/logged-in store, optimistic UI with rollback, SavedToast, SavedAuthSync, 200 items cap, stale item pruning, docs/saved-feature.md, 13 backend + 8 storefront unit tests passed (section 5 item 33)
 
 ### CP0 - Clean baseline (COMPLETE — exit test passed)
 - [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
@@ -679,8 +705,8 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] Fix revalidate auth, drop GET, rotate secret, add to backend env (B2)
 - [x] Require auth on trade lookup and filter in query (B3)
 - [x] Make `refundPayment` throw when no payment id, validate captured balance, add idempotency (B8a)
-- [ ] Strip `webhook_verified` and client `razorpay_order_id` from client data (B8b)
-- [ ] Reject non-INR in `initiatePayment` (B8c)
+- [x] Strip `webhook_verified` and client `razorpay_order_id` from client data (B8b)
+- [x] Reject non-INR in `initiatePayment` and `updatePayment` (B8c)
 - [ ] Block reset-link console logging in production
 - [ ] Zod validation on `POST /store/feedback`; file magic-byte check (S3)
 - [x] Distributed rate limiting on all public forms and auth routes (S2 / B6)

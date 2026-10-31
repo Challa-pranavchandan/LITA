@@ -157,6 +157,7 @@ export const authorizeAndCaptureCommissionStep = createStep(
     await paymentModule.updatePaymentSession({
       id: session.id,
       data: updatedData,
+      ...(input.webhook_verified ? { context: { is_reconcile: true } } : {}),
     })
 
     // Authorize payment session

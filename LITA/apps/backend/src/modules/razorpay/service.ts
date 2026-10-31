@@ -91,6 +91,16 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
   // Provider-returned keys take precedence, ensuring client-supplied order_id or amount cannot overwrite server data.
   async initiatePayment(input: InitiatePaymentInput): Promise<InitiatePaymentOutput> {
     const { amount, currency_code, data, context } = input
+
+    // 1. Currency guard (B8c): LITA is strictly India/INR-only. Reject non-INR currencies immediately.
+    const currency = String(currency_code || "").toUpperCase()
+    if (currency !== "INR") {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Cannot initiate Razorpay payment: currency must be INR (received: ${currency_code})`
+      )
+    }
+
     const paise = toPaise(amount)
     const sessionId = (data?.session_id as string) || (data?.id as string) || ""
 
@@ -103,7 +113,7 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
 
     const order = await this.client_.orders.create({
       amount: paise,
-      currency: String(currency_code).toUpperCase(),
+      currency,
       receipt: context?.idempotency_key
         ? String(context.idempotency_key).slice(0, 40)
         : undefined,
@@ -112,10 +122,12 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
       },
     })
 
+    // 2. Data sanitization (B8b): strip client-supplied order_id, amount, currency, and webhook_verified.
     const cleanData = { ...(data ?? {}) }
     delete cleanData.razorpay_order_id
     delete cleanData.amount
     delete cleanData.currency
+    delete cleanData.webhook_verified
 
     return {
       id: order.id,
@@ -460,14 +472,38 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
   }
 
   // In Medusa v2 (@medusajs/payment 2.21.2), updatePaymentSession replaces session.data with providerData.data.
-  // It receives data: data.data from the caller. We must never allow client-supplied amounts or order IDs to
-  // overwrite server-stored values.
+  // It receives data: data.data from the caller. We must never allow client-supplied amounts, order IDs, or
+  // webhook_verified flags to overwrite server-stored values.
   async updatePayment(input: UpdatePaymentInput): Promise<UpdatePaymentOutput> {
     const { amount, currency_code, data, context } = input
-    const currentData = (data ?? {}) as Record<string, any>
+
+    // 1. Currency guard (B8c): LITA is strictly India/INR-only. Reject non-INR currencies immediately.
+    const currency = String(currency_code || "").toUpperCase()
+    if (currency !== "INR") {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Cannot update Razorpay payment: currency must be INR (received: ${currency_code})`
+      )
+    }
+
+    const currentData = { ...((data ?? {}) as Record<string, any>) }
     const newPaise = toPaise(amount)
 
-    // 1. If this is a payment verification call from the frontend (payment completed in Razorpay modal),
+    // 2. Data sanitization (B8b):
+    // webhook_verified skips signature verification in authorizePayment and must strictly only be set
+    // by trusted internal reconciliation workflows (e.g. reconcile-razorpay-order or complete-commission-payment).
+    // If context does not declare an internal reconciliation, strip webhook_verified from caller input.
+    const providerContext = context as Record<string, any> | undefined
+    const isInternalReconcile = Boolean(
+      providerContext?.is_reconcile ||
+      providerContext?.internal_workflow ||
+      providerContext?.webhook_verified
+    )
+    if (!isInternalReconcile) {
+      delete currentData.webhook_verified
+    }
+
+    // 3. If this is a payment verification call from the frontend (payment completed in Razorpay modal),
     // preserve the existing server razorpay_order_id and authoritative amount (newPaise).
     const hasVerification = Boolean(
       currentData.razorpay_payment_id && currentData.razorpay_signature
@@ -512,7 +548,7 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
 
     const order = await this.client_.orders.create({
       amount: newPaise,
-      currency: String(currency_code).toUpperCase(),
+      currency,
       receipt: context?.idempotency_key
         ? String(context.idempotency_key).slice(0, 40)
         : undefined,
@@ -525,6 +561,7 @@ export class RazorpayProviderService extends AbstractPaymentProvider<RazorpayOpt
     delete cleanData.razorpay_order_id
     delete cleanData.amount
     delete cleanData.currency
+    delete cleanData.webhook_verified
 
     return {
       data: {

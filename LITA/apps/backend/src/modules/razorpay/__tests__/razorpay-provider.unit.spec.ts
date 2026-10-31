@@ -146,6 +146,51 @@ describe("RazorpayProviderService Unit Tests", () => {
         })
       ).rejects.toThrow("Cannot initiate Razorpay payment: session_id is required")
     })
+
+    it("throws MedusaError if currency_code is not INR", async () => {
+      await expect(
+        service.initiatePayment({
+          amount: 499,
+          currency_code: "usd",
+          data: { session_id: "ps_123" },
+        })
+      ).rejects.toThrow("Cannot initiate Razorpay payment: currency must be INR (received: usd)")
+
+      await expect(
+        service.initiatePayment({
+          amount: 499,
+          currency_code: "eur",
+          data: { session_id: "ps_123" },
+        })
+      ).rejects.toThrow("Cannot initiate Razorpay payment: currency must be INR (received: eur)")
+    })
+
+    it("strips client-supplied webhook_verified and razorpay_order_id", async () => {
+      mockOrdersCreate.mockResolvedValueOnce({
+        id: "order_server_authoritative",
+        amount: 49900,
+        currency: "INR",
+        status: "created",
+      })
+
+      const res = await service.initiatePayment({
+        amount: 499,
+        currency_code: "inr",
+        data: {
+          session_id: "ps_123",
+          webhook_verified: true,
+          razorpay_order_id: "order_client_fake",
+          amount: 100,
+          currency: "USD",
+        },
+      })
+
+      expect(res.id).toBe("order_server_authoritative")
+      expect(res.data?.razorpay_order_id).toBe("order_server_authoritative")
+      expect(res.data?.amount).toBe(49900)
+      expect(res.data?.currency).toBe("INR")
+      expect((res.data as any)?.webhook_verified).toBeUndefined()
+    })
   })
 
   describe("authorizePayment", () => {
@@ -489,6 +534,53 @@ describe("RazorpayProviderService Unit Tests", () => {
       expect(mockOrdersCreate).not.toHaveBeenCalled()
       expect(res.data?.amount).toBe(50000)
       expect(res.data?.razorpay_order_id).toBe("order_verified")
+    })
+
+    it("throws MedusaError if currency_code is not INR", async () => {
+      await expect(
+        service.updatePayment({
+          amount: 499,
+          currency_code: "usd",
+          data: { session_id: "ps_123" },
+        })
+      ).rejects.toThrow("Cannot update Razorpay payment: currency must be INR (received: usd)")
+    })
+
+    it("strips client-supplied webhook_verified when context.is_reconcile is not set", async () => {
+      const res = await service.updatePayment({
+        amount: 500,
+        currency_code: "inr",
+        data: {
+          razorpay_order_id: "order_existing",
+          razorpay_payment_id: "pay_verified_123",
+          razorpay_signature: "sig_abc",
+          webhook_verified: true, // client attempts to inject webhook_verified
+          amount: 50000,
+          session_id: "ps_123",
+        },
+      })
+
+      expect((res.data as any)?.webhook_verified).toBeUndefined()
+    })
+
+    it("preserves webhook_verified when context.is_reconcile is true", async () => {
+      const res = await service.updatePayment({
+        amount: 500,
+        currency_code: "inr",
+        data: {
+          razorpay_order_id: "order_existing",
+          razorpay_payment_id: "pay_webhook_reconciled",
+          webhook_verified: true,
+          amount: 50000,
+          session_id: "ps_123",
+        },
+        context: {
+          is_reconcile: true,
+        } as any,
+      })
+
+      expect((res.data as any)?.webhook_verified).toBe(true)
+      expect(res.data?.razorpay_payment_id).toBe("pay_webhook_reconciled")
     })
   })
 

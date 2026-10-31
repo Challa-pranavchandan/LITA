@@ -15,6 +15,7 @@ export type RateLimitAction =
   | "commission_upload"
   | "commission_pay_session"
   | "commission_pay"
+  | "wishlist"
   | "contact"
   | "reset"
 

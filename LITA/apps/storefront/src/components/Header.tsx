@@ -7,6 +7,7 @@ import { PromoBanner } from "@/components/PromoBanner";
 import { HeaderNav } from "@/components/HeaderNav";
 import { HeaderActions } from "@/components/HeaderActions";
 import { NavLogo } from "@/components/layout/Navbar";
+import { SavedAuthSync } from "@/components/SavedAuthSync";
 
 export async function Header() {
   const cookieStore = await cookies();
@@ -25,6 +26,7 @@ export async function Header() {
 
   return (
     <div className="w-full">
+      <SavedAuthSync isLoggedIn={Boolean(customer)} />
       {/* Top Burgundy Promo Banner */}
       <PromoBanner />
 

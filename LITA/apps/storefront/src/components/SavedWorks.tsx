@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { HttpTypes } from "@medusajs/types";
-import { useSaved } from "@/lib/saved";
+import { useSaved, toggleSaved } from "@/lib/saved";
 import { fetchSavedProducts } from "@/app/saved/actions";
 import { ArtworkCard } from "@/components/ArtworkGrid";
 import { aspectOf, isSoldOut, lowestPrice, metaString } from "@/lib/format";
@@ -94,7 +94,21 @@ export function SavedWorks() {
       setProducts([]);
       return;
     }
-    fetchSavedProducts(ids).then((p) => !cancelled && setProducts(p));
+    fetchSavedProducts(ids).then((p) => {
+      if (cancelled) return;
+      setProducts(p);
+
+      // Prune unresolvable or deleted catalog products in background
+      if (p.length > 0 && ids.length > p.length) {
+        const foundSet = new Set(p.map((item) => item.id));
+        const staleIds = ids.filter((id) => !foundSet.has(id));
+        if (staleIds.length > 0) {
+          staleIds.forEach((staleId) => {
+            toggleSaved(staleId).catch(() => {});
+          });
+        }
+      }
+    });
     return () => {
       cancelled = true;
     };

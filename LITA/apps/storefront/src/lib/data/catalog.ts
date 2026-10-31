@@ -312,9 +312,9 @@ export async function listProductsByIds(
   if (!region || !ids.length) return [];
   try {
     const { products } = await sdk.store.product.list({
-      id: ids.slice(0, 100),
+      id: ids.slice(0, 200),
       region_id: region.id,
-      limit: 100,
+      limit: 200,
       fields: PRODUCT_FIELDS,
     });
     return products;

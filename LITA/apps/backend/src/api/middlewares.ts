@@ -227,5 +227,12 @@ export default defineMiddlewares({
         }),
       ],
     },
+    {
+      matcher: "/store/customers/me/wishlist*",
+      middlewares: [
+        authenticate("customer", ["bearer", "session"]),
+        createRateLimitMiddleware("wishlist", 120, 15 * 60 * 1000),
+      ],
+    },
   ],
 })

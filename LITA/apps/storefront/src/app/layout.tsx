@@ -6,6 +6,7 @@ import { IntroProvider } from "@/components/intro/IntroProvider";
 import IntroLoader from "@/components/intro/IntroLoader";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { SavedToast } from "@/components/SavedToast";
 
 const displayFont = Cormorant_Garamond({
   subsets: ["latin"],
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <IntroProvider>
           <IntroLoader />
+          <SavedToast />
           <Header />
           <main id="main">{children}</main>
           <Footer />

@@ -147,6 +147,7 @@ export const reconcileSessionStep = createStep(
       await paymentModule.updatePaymentSession({
         id: session.id,
         data: updatedData,
+        context: { is_reconcile: true },
       })
     }
 
