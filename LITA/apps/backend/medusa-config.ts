@@ -174,6 +174,9 @@ module.exports = defineConfig({
       resolve: "./src/modules/feedback",
     },
     {
+      resolve: "./src/modules/inquiry",
+    },
+    {
       resolve: "@medusajs/medusa/payment",
       options: {
         providers: [

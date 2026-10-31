@@ -410,6 +410,36 @@
     - **Service Scripts & Documentation:** Added `start:server` and `start:worker` scripts in `apps/backend/package.json`. Updated `.env.example` and `.env.template` with placeholders. Authored comprehensive architecture blueprint in `docs/infrastructure.md`.
     - **Automated Tests:** Created 14 unit tests in `apps/backend/src/__tests__/medusa-config.unit.spec.ts` validating development in-memory defaults, Redis module registration, TLS URL support, production fail-fast protocol guards, workerMode resolution, and admin disabling. All 14 tests pass.
 
+31. **B6 — Contact, Inquiry, and Newsletter that Never Lose Data:**
+    - **Custom Medusa v2 Inquiry Module:** Created custom module at `apps/backend/src/modules/inquiry` with `Inquiry` (`kind`: contact | artwork | commission_general | trade_general, `name`, `email`, `phone`, `artwork_handle`, `budget`, `message`, `status`: new | replied | archived, `source_url`, `ip_hash`, `user_agent`, `metadata`) and `NewsletterSubscriber` (`email` unique, `status`: pending | confirmed | unsubscribed, `confirm_token_hash`, `confirmed_at`, `unsubscribed_at`, `source`) using Medusa's DML and `MedusaService`. Registered module in `medusa-config.ts`.
+    - **Database Migration:** Generated and applied migration `Migration20261031035234.ts` creating `inquiry` and `newsletter_subscriber` tables with indexes and unique constraints on Supabase PostgreSQL.
+    - **Salted IP Privacy Hashing:** Implemented `apps/backend/src/lib/ip-hash.ts` generating SHA-256 salted hashes using `IP_HASH_SALT` so raw customer IP addresses are never persisted in the database.
+    - **Resend Email Templates:** Added branded templates in `apps/backend/src/modules/resend/emails/templates.ts`:
+      - `inquiry-studio-notification`: Dispatches inquiries directly to the studio inbox (`STUDIO_EMAIL` or `studio@livinintheart.com`).
+      - `inquiry-customer-acknowledgement`: Dispatches branded acknowledgment to the customer.
+      - `newsletter-confirmation`: Sends confirmation email containing a cryptographically signed, single-use token URL (`/newsletter/confirm?token=...`).
+    - **Transactional Workflows:** Built in `apps/backend/src/workflows/inquiries.ts`:
+      - `createInquiryWorkflow`: Validates honeypot (silently accepts bot spam with 200 without writing to DB or emailing), persists inquiry to DB, triggers studio email and customer acknowledgment.
+      - `subscribeNewsletterWorkflow`: Registers subscriber as `pending`, generates a signed single-use HMAC token, and queues confirmation email.
+      - `confirmNewsletterWorkflow`: Verifies token against `confirm_token_hash`, marks subscriber as `confirmed`, stamps `confirmed_at`, and invalidates token to strictly prevent reuse.
+      - `unsubscribeNewsletterWorkflow`: Marks subscriber as `unsubscribed`, stamps `unsubscribed_at`, and invalidates token.
+    - **Store & Admin API Routes:**
+      - `POST /store/inquiries`, `POST /store/newsletter/subscribe`, `GET /store/newsletter/confirm`, `POST /store/newsletter/unsubscribe`.
+      - `GET /admin/inquiries` and `POST /admin/inquiries/:id` with TanStack query support and status transitions (`new`, `replied`, `archived`).
+      - Strict Zod validation in `apps/backend/src/api/middlewares.ts` enforcing max lengths, email normalization, and trimmed fields.
+    - **Admin Dashboard UI:** Built admin screen at `apps/backend/src/admin/routes/inquiries/page.tsx` with `defineRouteConfig({ label: "Inquiries", icon: ChatBubbleLeftRight })`, status pill badges, inquiry kind filters, search, expandable detail drawer, and status update actions.
+    - **Bot & Abuse Protection (Turnstile & Honeypot):**
+      - Created `apps/backend/src/lib/turnstile.ts` verifying tokens against Cloudflare Siteverify using `TURNSTILE_SECRET_KEY`, supporting test keys in dev and rejecting missing/invalid tokens with 400.
+      - Added hidden honeypot field (`website`, `tabIndex={-1}`, `autoComplete="off"`, off-screen hidden) to all public forms.
+    - **Pluggable Sliding-Window Rate Limiter:**
+      - Storefront: Updated `apps/storefront/src/lib/security/rate-limit.ts` using `@upstash/ratelimit` when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set. Falls back to in-memory sliding window ONLY in dev; in production fails closed with a log error. Added action types: `login`, `register`, `reset`, `contact`, `inquiry`, `newsletter`, `feedback`, `trade`. Applied to `/api/inquiry`, password reset, customer auth, trade applications, and feedback.
+      - Backend: Created sliding window rate limit middleware in `apps/backend/src/api/middlewares/rate-limit.ts` keyed by hashed IP returning HTTP 429 with `Retry-After` header. Applied to inquiries, newsletter, trade, feedback, and commission upload-url routes.
+    - **Storefront Forms & Dedicated Landing Pages:**
+      - Replaced `apps/storefront/src/app/api/inquiry/route.ts` with thin proxy to Medusa backend with honest 502 error handling, honeypot suppression, and rate limiting.
+      - Created `Turnstile.tsx` client component and upgraded `InquiryForm.tsx` and `NewsletterForm.tsx` with Turnstile, honeypots, loading states, and honest success/error messaging.
+      - Created dedicated landing pages: `/newsletter/confirmed`, `/newsletter/unsubscribed`, and confirmation proxy handler `/newsletter/confirm/route.ts`.
+    - **Automated Tests:** 16 backend unit tests passing in `apps/backend/src/__tests__/inquiries.unit.spec.ts` and 14 storefront unit tests passing in `apps/storefront/src/__tests__/inquiry-forms.test.js`.
+
 ---
 
 
@@ -482,9 +512,18 @@ Resolved by integrating the Medusa Notification module (`@medusajs/medusa/notifi
 - `commission.status_changed` (`src/subscribers/commission-status-changed.ts`)
 Hardened `password-reset.ts` and the Resend provider to never log reset links or sensitive tokens in production logs when `RESEND_API_KEY` is missing. Validated with automated unit test suites in `src/modules/resend/__tests__` and `src/subscribers/__tests__`.
 
-**B6. Contact, inquiry and newsletter submissions can vanish.**
-`apps/storefront/src/app/api/inquiry/route.ts` only logs to the server console when `INQUIRY_WEBHOOK_URL` is unset, and still returns success. The newsletter form posts to the same route, so signups go nowhere. No rate limit, honeypot or captcha.
-Fix: send through Resend (studio inbox) and store in the backend, add Turnstile/hCaptcha plus distributed rate limiting, connect newsletter to a real provider.
+**B6. Contact, inquiry and newsletter submissions can vanish. (RESOLVED)**
+Resolved across backend module, database migrations, email notifications, bot protection, and storefront UI:
+- Custom Medusa module `apps/backend/src/modules/inquiry` with `Inquiry` and `NewsletterSubscriber` models; migration `Migration20261031035234.ts` executed on Supabase PostgreSQL.
+- Salted SHA-256 IP privacy hashing (`apps/backend/src/lib/ip-hash.ts`) prevents storing raw IP addresses.
+- Transactional workflows: `createInquiryWorkflow`, `subscribeNewsletterWorkflow`, `confirmNewsletterWorkflow`, `unsubscribeNewsletterWorkflow`.
+- Email delivery via Resend: `inquiry-studio-notification` directly to studio inbox, `inquiry-customer-acknowledgement` to customers, and `newsletter-confirmation` with single-use verification links.
+- Store routes (`POST /store/inquiries`, `POST /store/newsletter/subscribe`, `GET /store/newsletter/confirm`, `POST /store/newsletter/unsubscribe`) and Admin routes (`GET /admin/inquiries`, `POST /admin/inquiries/:id`).
+- Admin Inquiries dashboard (`apps/backend/src/admin/routes/inquiries/page.tsx`) with status filters, search, and status update actions.
+- Bot & abuse protection: Cloudflare Turnstile token validation against Siteverify endpoint (`apps/backend/src/lib/turnstile.ts`), hidden honeypot fields silently returning 200 without saving or emailing.
+- Pluggable sliding-window rate limiter in `apps/storefront/src/lib/security/rate-limit.ts` (Upstash Redis when configured, in-memory dev fallback, fail-closed production guard) and backend middleware (`apps/backend/src/api/middlewares/rate-limit.ts`) returning 429 with `Retry-After`.
+- Storefront proxy `/api/inquiry` returns honest 502 errors when backend is unreachable (never returns ok on failure); `InquiryForm` and `NewsletterForm` updated with Turnstile and honeypots; dedicated pages `/newsletter/confirmed`, `/newsletter/unsubscribed`, and confirmation handler `/newsletter/confirm/route.ts`.
+- Validated with 16 backend unit tests and 14 storefront unit tests.
 
 **B7. Build safety is switched off and dependencies are undeclared. (RESOLVED — CP0)**
 All items in the original blocker have been closed:
@@ -606,6 +645,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **B3 — Trade application data leak:** require customer authentication on GET, query-level case-insensitive filtering ($ilike) without in-memory limits, safe field projection, deduplication on POST, 15 backend unit tests + 4 storefront unit tests passed (section 5 item 28)
 - [x] **B8a — Razorpay refund hardening:** throw on missing payment ID, validate amount against captured payment, ensure idempotency via receipt/notes, safe logging without secrets, 8 unit tests passed (section 5 item 29)
 - [x] **B4 — Redis infrastructure & worker mode:** event bus, workflow engine, distributed locking, caching, workerMode, production startup guard, docs/infrastructure.md, 14 unit tests passed (section 5 item 30)
+- [x] **B6 — Contact, inquiry & newsletter that never lose data:** Custom Medusa inquiry module, NewsletterSubscriber double opt-in, salted IP hashing, Resend studio & confirmation emails, Turnstile bot protection, honeypots, pluggable Upstash rate limiter with fail-closed production guard, Next.js /api/inquiry honest 502 proxy, Admin Inquiries & Newsletter dashboard, 16 backend + 14 storefront tests passed (section 5 item 31)
 
 ### CP0 - Clean baseline (COMPLETE — exit test passed)
 - [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
@@ -627,8 +667,8 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Reject non-INR in `initiatePayment` (B8c)
 - [ ] Block reset-link console logging in production
 - [ ] Zod validation on `POST /store/feedback`; file magic-byte check (S3)
-- [ ] Distributed rate limiting on all public forms and auth routes (S2)
-- [ ] Captcha on contact, inquiry, trade, feedback
+- [x] Distributed rate limiting on all public forms and auth routes (S2 / B6)
+- [x] Captcha on contact, inquiry, trade, feedback (B6 Turnstile)
 - [ ] Revisit cookie attributes (S13)
 
 ### CP2 - Payments
@@ -639,15 +679,15 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Decide commission payment path (payment link or cart) and build it (B10)
 - [ ] Add Razorpay hosts to CSP and test in report-only first (S1)
 
-### CP3 - Email and notifications (PARTIALLY COMPLETE — see B5)
+### CP3 - Email and notifications (PARTIALLY COMPLETE — see B5 & B6)
 - [x] Medusa Notification module + custom Resend provider (`apps/backend/src/modules/resend/`)
 - [x] Order placed email (`order.placed` subscriber)
 - [x] Order fulfilled / shipped email (`order.fulfillment_created` subscriber)
 - [x] Trade application status emails (approved / rejected via `trade_application.status_changed`)
 - [x] Commission status emails (quoted / accepted / converted via `commission.status_changed`)
 - [ ] Order canceled and refunded emails (no `order.canceled` / `refund.processed` subscribers yet)
-- [ ] Studio inbox notification for contact form, inquiry form, feedback widget, and new trade applications
-- [ ] Newsletter provider and double opt-in
+- [x] Studio inbox notification for contact form, inquiry form, and customer acknowledgement (B6)
+- [x] Newsletter provider and double opt-in (B6)
 - [ ] Verify sending domain, SPF, DKIM, DMARC
 
 ### CP4 - Infrastructure

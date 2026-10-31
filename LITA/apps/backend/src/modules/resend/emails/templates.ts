@@ -523,3 +523,161 @@ export function passwordResetTemplate(data: PasswordResetTemplateData): {
     }),
   }
 }
+
+/* ==========================================================================
+   6. Inquiry Notification to Studio Template
+   ========================================================================== */
+export interface InquiryStudioNotificationTemplateData {
+  inquiryId: string
+  kind: "contact" | "artwork" | "commission_general" | "trade_general"
+  name: string
+  email: string
+  phone?: string | null
+  artworkHandle?: string | null
+  budget?: string | null
+  message: string
+  sourceUrl?: string | null
+}
+
+export function inquiryStudioNotificationTemplate(data: InquiryStudioNotificationTemplateData): {
+  subject: string
+  html: string
+} {
+  const kindLabels: Record<string, string> = {
+    contact: "Contact Message",
+    artwork: "Artwork Inquiry",
+    commission_general: "Commission Inquiry",
+    trade_general: "Trade Inquiry",
+  }
+  const kindLabel = kindLabels[data.kind] || "Inquiry"
+  const subject = `New ${kindLabel} from ${data.name} — Livin In The Art`
+
+  const detailsRows = [
+    `<tr><td style="padding: 6px 0; font-size: 13px; color: #777777; width: 140px;">Name:</td><td style="padding: 6px 0; font-size: 13px; color: #1a1a1a; font-weight: 500;">${escapeHtml(data.name)}</td></tr>`,
+    `<tr><td style="padding: 6px 0; font-size: 13px; color: #777777;">Email:</td><td style="padding: 6px 0; font-size: 13px; color: #1a1a1a;"><a href="mailto:${escapeHtml(data.email)}" style="color: #5f2f3c; text-decoration: underline;">${escapeHtml(data.email)}</a></td></tr>`,
+    data.phone ? `<tr><td style="padding: 6px 0; font-size: 13px; color: #777777;">Phone:</td><td style="padding: 6px 0; font-size: 13px; color: #1a1a1a;">${escapeHtml(data.phone)}</td></tr>` : "",
+    data.artworkHandle ? `<tr><td style="padding: 6px 0; font-size: 13px; color: #777777;">Artwork Handle:</td><td style="padding: 6px 0; font-size: 13px; color: #1a1a1a;">${escapeHtml(data.artworkHandle)}</td></tr>` : "",
+    data.budget ? `<tr><td style="padding: 6px 0; font-size: 13px; color: #777777;">Budget:</td><td style="padding: 6px 0; font-size: 13px; color: #1a1a1a;">${escapeHtml(data.budget)}</td></tr>` : "",
+    data.sourceUrl ? `<tr><td style="padding: 6px 0; font-size: 13px; color: #777777;">Source Page:</td><td style="padding: 6px 0; font-size: 13px; color: #1a1a1a;"><a href="${escapeHtml(data.sourceUrl)}" style="color: #5f2f3c; text-decoration: underline;">${escapeHtml(data.sourceUrl)}</a></td></tr>` : "",
+  ].filter(Boolean).join("")
+
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">
+      New ${escapeHtml(kindLabel)}
+    </h1>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+      ${detailsRows}
+    </table>
+    <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5f2f3c; margin-bottom: 8px;">
+      Message
+    </div>
+    <div style="margin: 0 0 24px 0; padding: 16px 18px; background-color: #faf8f5; border: 1px solid #eee7de; border-radius: 3px; font-size: 14px; line-height: 1.6; color: #333333; white-space: pre-wrap;">
+      ${escapeHtml(data.message)}
+    </div>
+    <p style="margin: 16px 0 0 0; font-size: 12px; color: #888888;">
+      Inquiry ID: ${escapeHtml(data.inquiryId)}
+    </p>`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: `New ${kindLabel} received from ${data.name}.`,
+      contentHtml,
+    }),
+  }
+}
+
+/* ==========================================================================
+   7. Inquiry Customer Acknowledgement Template
+   ========================================================================== */
+export interface InquiryCustomerAcknowledgementTemplateData {
+  name: string
+  email: string
+  kind: "contact" | "artwork" | "commission_general" | "trade_general"
+  artworkHandle?: string | null
+  message: string
+}
+
+export function inquiryCustomerAcknowledgementTemplate(data: InquiryCustomerAcknowledgementTemplateData): {
+  subject: string
+  html: string
+} {
+  const subject = "Thank you for reaching out — Livin In The Art"
+
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">
+      Thank you for contacting Livin In The Art
+    </h1>
+    <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+      Dear ${escapeHtml(data.name)},
+    </p>
+    <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+      We have received your message. Our studio curators review every inquiry thoughtfully and will respond to your email within two working days.
+    </p>
+    ${data.artworkHandle ? `<p style="margin: 0 0 16px 0; font-size: 13px; color: #777777;">Artwork reference: <strong>${escapeHtml(data.artworkHandle)}</strong></p>` : ""}
+    <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5f2f3c; margin: 24px 0 8px 0;">
+      A copy of your message:
+    </div>
+    <div style="padding: 16px 18px; background-color: #faf8f5; border: 1px solid #eee7de; border-radius: 3px; font-size: 13px; line-height: 1.6; color: #444444; white-space: pre-wrap;">
+      ${escapeHtml(data.message)}
+    </div>
+    <p style="margin: 28px 0 0 0; font-size: 12px; line-height: 1.5; color: #888888;">
+      Warm regards,<br />
+      The Studio Team &bull; Livin In The Art
+    </p>`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: "We have received your message and will reply shortly.",
+      contentHtml,
+    }),
+  }
+}
+
+/* ==========================================================================
+   8. Newsletter Double Opt-In Confirmation Template
+   ========================================================================== */
+export interface NewsletterConfirmationTemplateData {
+  email: string
+  confirmUrl: string
+}
+
+export function newsletterConfirmationTemplate(data: NewsletterConfirmationTemplateData): {
+  subject: string
+  html: string
+} {
+  const subject = "Confirm your subscription — Livin In The Art"
+
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">
+      Confirm Your Subscription
+    </h1>
+    <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+      Thank you for your interest in Livin In The Art. Please confirm your email address (<strong>${escapeHtml(data.email)}</strong>) to receive our monthly curations, studio journal releases, and exhibition invitations.
+    </p>
+    <div style="margin: 28px 0; text-align: left;">
+      <a href="${data.confirmUrl}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">
+        Confirm Subscription
+      </a>
+    </div>
+    <p style="margin: 24px 0 0 0; font-size: 12px; line-height: 1.5; color: #888888;">
+      If you did not request this newsletter subscription, you can safely ignore this email.
+    </p>
+    <p style="margin: 16px 0 0 0; font-size: 12px; line-height: 1.5; color: #888888; word-break: break-all;">
+      Or paste this URL into your browser:<br />
+      <a href="${data.confirmUrl}" style="color: #5f2f3c; text-decoration: underline;">${escapeHtml(data.confirmUrl)}</a>
+    </p>`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: "Please confirm your subscription to Livin In The Art releases.",
+      contentHtml,
+    }),
+  }
+}
+

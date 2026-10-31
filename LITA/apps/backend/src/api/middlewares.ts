@@ -1,6 +1,7 @@
 import { authenticate, configureStoreSearch, defineMiddlewares, validateAndTransformBody } from "@medusajs/framework/http"
 import { z } from "@medusajs/framework/zod"
 import multer from "multer"
+import { createRateLimitMiddleware } from "./middlewares/rate-limit"
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -65,12 +66,47 @@ export const UpdateTradeApplicationSchema = z.object({
   status: z.enum(["approved", "rejected", "pending"]),
 })
 
+export const PostInquirySchema = z.object({
+  kind: z.enum(["contact", "artwork", "commission_general", "trade_general"]),
+  name: z.string().trim().min(1, "Name is required").max(120, "Name cannot exceed 120 characters"),
+  email: z.string().trim().toLowerCase().pipe(z.string().email("Valid email is required")),
+  phone: z.string().trim().max(30, "Phone cannot exceed 30 characters").optional().nullable(),
+  artwork_handle: z.string().trim().max(120, "Artwork handle cannot exceed 120 characters").optional().nullable(),
+  budget: z.string().trim().max(60, "Budget cannot exceed 60 characters").optional().nullable(),
+  message: z.string().trim().min(1, "Message is required").max(4000, "Message cannot exceed 4000 characters"),
+  source_url: z.string().trim().max(500, "Source URL cannot exceed 500 characters").optional().nullable(),
+  turnstile_token: z.string().trim().max(2048).optional().nullable(),
+  "cf-turnstile-response": z.string().trim().max(2048).optional().nullable(),
+  website: z.string().optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+})
+
+export const SubscribeNewsletterSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.string().email("Valid email is required")),
+  source: z.string().trim().max(100, "Source cannot exceed 100 characters").optional().nullable(),
+  turnstile_token: z.string().trim().max(2048).optional().nullable(),
+  "cf-turnstile-response": z.string().trim().max(2048).optional().nullable(),
+  website: z.string().optional().nullable(),
+})
+
+export const UnsubscribeNewsletterSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.string().email("Valid email is required")),
+  website: z.string().optional().nullable(),
+})
+
+export const UpdateInquirySchema = z.object({
+  status: z.enum(["new", "replied", "archived"]),
+})
+
 export default defineMiddlewares({
   routes: [
     {
       method: ["POST"],
       matcher: "/store/feedback",
-      middlewares: [upload.single("image")],
+      middlewares: [
+        createRateLimitMiddleware("feedback", 5, 15 * 60 * 1000),
+        upload.single("image"),
+      ],
     },
     {
       method: ["POST"],
@@ -111,7 +147,10 @@ export default defineMiddlewares({
     {
       matcher: "/store/trade-applications",
       method: "POST",
-      middlewares: [validateAndTransformBody(PostTradeApplicationSchema)],
+      middlewares: [
+        createRateLimitMiddleware("trade", 5, 15 * 60 * 1000),
+        validateAndTransformBody(PostTradeApplicationSchema),
+      ],
     },
     {
       matcher: "/store/trade-applications",
@@ -124,6 +163,39 @@ export default defineMiddlewares({
       matcher: "/admin/trade-applications/:id",
       method: "POST",
       middlewares: [validateAndTransformBody(UpdateTradeApplicationSchema)],
+    },
+    {
+      matcher: "/store/inquiries",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("inquiry", 5, 15 * 60 * 1000),
+        validateAndTransformBody(PostInquirySchema),
+      ],
+    },
+    {
+      matcher: "/store/newsletter/subscribe",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("newsletter", 5, 15 * 60 * 1000),
+        validateAndTransformBody(SubscribeNewsletterSchema),
+      ],
+    },
+    {
+      matcher: "/store/newsletter/unsubscribe",
+      method: "POST",
+      middlewares: [validateAndTransformBody(UnsubscribeNewsletterSchema)],
+    },
+    {
+      matcher: "/admin/inquiries/:id",
+      method: "POST",
+      middlewares: [validateAndTransformBody(UpdateInquirySchema)],
+    },
+    {
+      matcher: "/store/commissions/upload-url",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("commission_upload", 10, 15 * 60 * 1000),
+      ],
     },
     {
       matcher: "/store/commissions",

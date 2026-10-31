@@ -126,7 +126,7 @@ export async function login(
   }
 
   // 2. Sliding window rate limiting
-  const rateLimit = checkRateLimit(validation.data.email, "login", 5, 15 * 60 * 1000);
+  const rateLimit = await checkRateLimit(validation.data.email, "login", 5, 15 * 60 * 1000);
   if (!rateLimit.success) {
     return {
       ok: false,
@@ -200,7 +200,7 @@ export async function register(input: {
   }
 
   // 2. Sliding window rate limiting
-  const rateLimit = checkRateLimit(validation.data.email, "register", 5, 15 * 60 * 1000);
+  const rateLimit = await checkRateLimit(validation.data.email, "register", 5, 15 * 60 * 1000);
   if (!rateLimit.success) {
     return {
       ok: false,

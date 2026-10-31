@@ -3,34 +3,12 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import FeedbackWidget from "@/components/FeedbackWidget";
+import NewsletterForm from "@/components/NewsletterForm";
 
 export function Footer() {
-  const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [showAccessibilityModal, setShowAccessibilityModal] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
   const [largerText, setLargerText] = useState(false);
-
-  async function handleNewsletterSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!email.trim()) return;
-
-    setState("sending");
-    try {
-      const res = await fetch("/api/inquiry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "newsletter", email: email.trim() }),
-      });
-      if (!res.ok) throw new Error();
-      setEmail("");
-      setState("done");
-      setTimeout(() => setState("idle"), 4000);
-    } catch {
-      setState("error");
-      setTimeout(() => setState("idle"), 4000);
-    }
-  }
 
   return (
     <footer className="w-full border-t border-[#E5E5E5] bg-[#FAF9F7] text-[#222222] font-sans antialiased">
@@ -44,37 +22,7 @@ export function Footer() {
               <h2 className="text-[15px] font-normal text-[#222222] tracking-tight mb-4">
                 Newsletter Sign Up
               </h2>
-              <form onSubmit={handleNewsletterSubmit} className="w-full max-w-[440px]">
-                <div className="relative flex items-center bg-[#ECEBE8] border-b border-[#CCCCCC] px-4 py-3 transition-colors focus-within:border-[#222222]">
-                  <input
-                    type="email"
-                    name="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    placeholder="Email Address"
-                    disabled={state === "sending"}
-                    className="w-full bg-transparent text-[14px] text-[#222222] placeholder:text-[#7A7A7A] focus:outline-none font-normal pr-3 disabled:opacity-50"
-                  />
-                  <button
-                    type="submit"
-                    disabled={state === "sending"}
-                    className="text-[14px] text-[#222222] font-normal hover:text-black whitespace-nowrap transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {state === "sending" ? "Signing Up..." : state === "done" ? "Signed Up ✓" : "Sign Up"}
-                  </button>
-                </div>
-                {state === "done" && (
-                  <p className="mt-2 text-xs text-emerald-700" role="status">
-                    Thank you for subscribing to our newsletter.
-                  </p>
-                )}
-                {state === "error" && (
-                  <p className="mt-2 text-xs text-red-600" role="alert">
-                    Please check your email address and try again.
-                  </p>
-                )}
-              </form>
+              <NewsletterForm />
             </div>
 
             {/* Social Section */}

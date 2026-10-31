@@ -1,17 +1,29 @@
 "use server";
 
 import { sdk } from "@/lib/medusa";
+import { checkRateLimit } from "@/lib/security/rate-limit";
 
 export type PasswordResetResult = { ok: boolean; error?: string };
 
 /**
  * Request a password reset link for the given email.
- * Always returns ok: true to prevent account enumeration / user discovery.
+ * Always returns ok: true to prevent account enumeration / user discovery,
+ * unless rate limited.
  */
 export async function requestPasswordReset(email: string): Promise<PasswordResetResult> {
   const trimmed = email.trim();
   if (!trimmed) {
     return { ok: false, error: "Please enter your email address." };
+  }
+
+  const rateLimit = await checkRateLimit(trimmed, "reset", 5, 15 * 60 * 1000);
+  if (!rateLimit.success) {
+    return {
+      ok: false,
+      error: `Too many password reset requests. Please try again in ${Math.ceil(
+        rateLimit.resetInSeconds / 60
+      )} minutes.`,
+    };
   }
 
   try {
