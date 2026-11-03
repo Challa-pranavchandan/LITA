@@ -12,6 +12,13 @@ import {
   changePasswordSchema,
   updateProfileSchema,
 } from "@/lib/validation/auth";
+import {
+  addressSchema,
+  normalizeIndianPhone,
+  splitFullName,
+  type AddressFormValues,
+  type ValidAddressFormValues,
+} from "@/lib/validation/address";
 
 const JWT_COOKIE = "_medusa_jwt";
 const CART_COOKIE = "_cart_id";
@@ -398,56 +405,135 @@ export async function transferCart(): Promise<void> {
   }
 }
 
-export type CustomerAddressPayload = {
-  first_name?: string;
-  last_name?: string;
-  company?: string;
-  address_1?: string;
-  address_2?: string;
-  city?: string;
-  country_code?: string;
-  province?: string;
-  postal_code?: string;
-  phone?: string;
-  is_default_shipping?: boolean;
-  is_default_billing?: boolean;
-};
+function customerAddressPayload(
+  values: ValidAddressFormValues,
+  existing?: HttpTypes.StoreCustomerAddress
+): HttpTypes.StoreCreateCustomerAddress {
+  const { first_name, last_name } = splitFullName(values.full_name);
+  return {
+    first_name,
+    last_name,
+    phone: normalizeIndianPhone(values.phone),
+    company: existing?.company ?? values.company ?? "",
+    address_1: values.address_1,
+    address_2: values.address_2,
+    city: values.city,
+    country_code: "in",
+    province: values.province,
+    postal_code: values.postal_code,
+    is_default_shipping: false,
+    metadata: {
+      ...(existing?.metadata ?? {}),
+      landmark: values.landmark || "",
+      delivery_instructions: values.delivery_instructions || "",
+    },
+  };
+}
+
+function addressValidationError(values: unknown):
+  | { success: true; data: ValidAddressFormValues }
+  | { success: false; error: string } {
+  const result = addressSchema.safeParse(values);
+  if (!result.success) {
+    return { success: false, error: result.error.issues[0]?.message ?? "Check the address details." };
+  }
+  if (result.data.country_code !== "in") {
+    return { success: false, error: "Delivery addresses must be in India." };
+  }
+  return { success: true, data: result.data };
+}
+
+async function setDefaultShippingAddress(
+  addressId: string,
+  previousDefaults: HttpTypes.StoreCustomerAddress[],
+  headers: { authorization?: string }
+): Promise<void> {
+  try {
+    for (const address of previousDefaults) {
+      await sdk.store.customer.updateAddress(
+        address.id,
+        { is_default_shipping: false },
+        {},
+        headers
+      );
+    }
+    await sdk.store.customer.updateAddress(
+      addressId,
+      { is_default_shipping: true },
+      {},
+      headers
+    );
+  } catch (error) {
+    const restoreErrors: string[] = [];
+    for (const address of previousDefaults) {
+      try {
+        await sdk.store.customer.updateAddress(
+          address.id,
+          { is_default_shipping: true },
+          {},
+          headers
+        );
+      } catch {
+        restoreErrors.push(address.id);
+      }
+    }
+    if (restoreErrors.length) {
+      throw new Error("Could not set the default address or restore the previous default.");
+    }
+    throw error;
+  }
+}
 
 export async function addCustomerAddress(
-  payloadOrState: CustomerAddressPayload | unknown,
-  formData?: FormData
-): Promise<{ ok: boolean; success?: boolean; error?: string | null }> {
+  values: AddressFormValues
+): Promise<{ ok: boolean; addressId?: string; error?: string | null }> {
   const headers = await getAuthHeaders();
   if (!headers.authorization) {
-    return { ok: false, success: false, error: "Not authenticated" };
+    return { ok: false, error: "Not authenticated" };
   }
 
-  let address: CustomerAddressPayload = {};
-
-  if (formData instanceof FormData) {
-    address = {
-      first_name: (formData.get("first_name") as string) || "",
-      last_name: (formData.get("last_name") as string) || "",
-      company: (formData.get("company") as string) || "",
-      address_1: (formData.get("address_1") as string) || "",
-      address_2: (formData.get("address_2") as string) || "",
-      city: (formData.get("city") as string) || "",
-      country_code: (formData.get("country_code") as string) || "us",
-      province: (formData.get("province") as string) || "",
-      postal_code: (formData.get("postal_code") as string) || "",
-      phone: (formData.get("phone") as string) || "",
-    };
-  } else if (payloadOrState && typeof payloadOrState === "object") {
-    address = payloadOrState as CustomerAddressPayload;
-  }
+  const validation = addressValidationError(values);
+  if (!validation.success) return { ok: false, error: validation.error };
 
   try {
-    await sdk.store.customer.createAddress(address as HttpTypes.StoreCreateCustomerAddress, {}, headers);
+    const { customer: before } = await sdk.store.customer.retrieve(
+      { fields: "*addresses" },
+      headers
+    );
+    const existingIds = new Set((before.addresses ?? []).map((address) => address.id));
+    const { customer } = await sdk.store.customer.createAddress(
+      customerAddressPayload(validation.data),
+      { fields: "*addresses" },
+      headers
+    );
+    let createdAddress = (customer.addresses ?? []).find(
+      (address) => !existingIds.has(address.id)
+    );
+    if (!createdAddress) {
+      const { customer: refreshed } = await sdk.store.customer.retrieve(
+        { fields: "*addresses" },
+        headers
+      );
+      createdAddress = (refreshed.addresses ?? []).find(
+        (address) => !existingIds.has(address.id)
+      );
+    }
+    if (!createdAddress) {
+      return { ok: false, error: "The address was saved but could not be selected. Refresh and try again." };
+    }
+
+    if (validation.data.is_default_shipping) {
+      const previousDefaults = (before.addresses ?? []).filter(
+        (address) => address.is_default_shipping
+      );
+      await setDefaultShippingAddress(createdAddress.id, previousDefaults, headers);
+    }
+
     revalidatePath("/account");
-    return { ok: true, success: true, error: null };
+    return { ok: true, addressId: createdAddress.id, error: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to add address";
-    return { ok: false, success: false, error: message };
+    return { ok: false, error: message };
   }
 }
 
@@ -458,6 +544,7 @@ export async function deleteCustomerAddress(
   if (!headers.authorization) {
     return { ok: false, error: "Not authenticated" };
   }
+  if (!addressId.trim()) return { ok: false, error: "Address ID is required." };
 
   try {
     await sdk.store.customer.deleteAddress(addressId, headers);
@@ -470,42 +557,43 @@ export async function deleteCustomerAddress(
 }
 
 export async function updateCustomerAddress(
-  addressIdOrState: string | unknown,
-  payloadOrFormData?: CustomerAddressPayload | FormData | unknown
-): Promise<{ ok: boolean; success?: boolean; error?: string | null }> {
+  addressId: string,
+  values: AddressFormValues
+): Promise<{ ok: boolean; error?: string | null }> {
   const headers = await getAuthHeaders();
   if (!headers.authorization) {
-    return { ok: false, success: false, error: "Not authenticated" };
+    return { ok: false, error: "Not authenticated" };
   }
 
-  let addressId = typeof addressIdOrState === "string" ? addressIdOrState : "";
-  let address: CustomerAddressPayload = {};
-
-  if (payloadOrFormData instanceof FormData) {
-    addressId = (payloadOrFormData.get("address_id") as string) || addressId;
-    address = {
-      first_name: (payloadOrFormData.get("first_name") as string) || "",
-      last_name: (payloadOrFormData.get("last_name") as string) || "",
-      company: (payloadOrFormData.get("company") as string) || "",
-      address_1: (payloadOrFormData.get("address_1") as string) || "",
-      address_2: (payloadOrFormData.get("address_2") as string) || "",
-      city: (payloadOrFormData.get("city") as string) || "",
-      country_code: (payloadOrFormData.get("country_code") as string) || "us",
-      province: (payloadOrFormData.get("province") as string) || "",
-      postal_code: (payloadOrFormData.get("postal_code") as string) || "",
-      phone: (payloadOrFormData.get("phone") as string) || "",
-    };
-  } else if (payloadOrFormData && typeof payloadOrFormData === "object") {
-    address = payloadOrFormData as CustomerAddressPayload;
-  }
+  if (!addressId.trim()) return { ok: false, error: "Address ID is required." };
+  const validation = addressValidationError(values);
+  if (!validation.success) return { ok: false, error: validation.error };
 
   try {
-    await sdk.store.customer.updateAddress(addressId, address as HttpTypes.StoreUpdateCustomerAddress, {}, headers);
+    const { customer } = await sdk.store.customer.retrieve(
+      { fields: "*addresses" },
+      headers
+    );
+    const existingAddress = (customer.addresses ?? []).find(
+      (address) => address.id === addressId
+    );
+    const previousDefaults = (customer.addresses ?? []).filter(
+      (address) => address.is_default_shipping && address.id !== addressId
+    );
+    await sdk.store.customer.updateAddress(
+      addressId,
+      customerAddressPayload(validation.data, existingAddress),
+      {},
+      headers
+    );
+    if (validation.data.is_default_shipping) {
+      await setDefaultShippingAddress(addressId, previousDefaults, headers);
+    }
     revalidatePath("/account");
-    return { ok: true, success: true, error: null };
+    return { ok: true, error: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to update address";
-    return { ok: false, success: false, error: message };
+    return { ok: false, error: message };
   }
 }
 

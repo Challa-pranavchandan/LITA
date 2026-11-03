@@ -8,7 +8,6 @@ import {
   listShippingOptions,
 } from "@/lib/data/cart";
 import { getCustomer } from "@/lib/data/customer";
-import { getRegion } from "@/lib/data/catalog";
 import { CheckoutFlow } from "@/components/CheckoutFlow";
 import { OrderTotals, PromoCode } from "@/components/CartLines";
 import { formatMoney } from "@/lib/format";
@@ -20,7 +19,7 @@ export default async function CheckoutPage() {
   const customer = await getCustomer();
   if (customer) await attachCustomerToCart();
 
-  const [cart, region] = await Promise.all([getCart(), getRegion()]);
+  const cart = await getCart();
 
   if (!cart || !(cart.items ?? []).length) {
     return (
@@ -37,22 +36,19 @@ export default async function CheckoutPage() {
     listPaymentProviders(),
   ]);
 
-  const countries = (region?.countries ?? [])
-    .filter((c) => c.iso_2)
-    .map((c) => ({ iso_2: c.iso_2!, name: c.display_name ?? c.name ?? c.iso_2! }));
-
   return (
     <div className="page py-10">
       <h1 className="mb-8 text-3xl">Checkout</h1>
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-20">
         <CheckoutFlow
           cart={cart}
-          countries={countries}
           shippingOptions={shippingOptions}
           providers={providers}
           customerEmail={customer?.email}
           customerFirstName={customer?.first_name ?? undefined}
           customerLastName={customer?.last_name ?? undefined}
+          customerPhone={customer?.phone ?? undefined}
+          customerAddresses={customer?.addresses ?? []}
         />
         <aside className="h-fit space-y-6 border border-mist bg-wall p-6 lg:sticky lg:top-24">
           <h2 className="text-lg">Your order</h2>

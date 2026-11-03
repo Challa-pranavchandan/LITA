@@ -9,6 +9,11 @@ import { getRegion } from "@/lib/data/catalog"
 import { getAuthHeaders } from "@/lib/data/customer"
 
 import { assertAllowedProvider, isRazorpayProvider } from "@/lib/payment-guard"
+import {
+  checkoutAddressSchema,
+  splitFullName,
+  type CheckoutAddressInput,
+} from "@/lib/validation/address";
 
 const CART_COOKIE = "_cart_id";
 const CART_FIELDS =
@@ -199,28 +204,60 @@ export async function removePromoCode(code: string): Promise<ActionResult> {
   }
 }
 
-export type AddressInput = {
-  email: string;
-  first_name: string;
-  last_name: string;
-  phone: string;
-  address_1: string;
-  address_2: string;
-  city: string;
-  province: string;
-  postal_code: string;
-  country_code: string;
-};
+export type AddressInput = CheckoutAddressInput;
 
 export async function saveAddress(input: AddressInput): Promise<ActionResult> {
   const id = await cartId();
   if (!id) return { ok: false, error: "Your bag is empty." };
-  const { email, ...address } = input;
+
+  const validation = checkoutAddressSchema.safeParse(input);
+  if (!validation.success) {
+    return {
+      ok: false,
+      error: validation.error.issues[0]?.message ?? "Check the address details.",
+    };
+  }
+  if (validation.data.country_code !== "in") {
+    return { ok: false, error: "Delivery addresses must be in India." };
+  }
+
+  const { email, full_name, phone, delivery_instructions, ...formValues } =
+    validation.data;
+  const { first_name, last_name } = splitFullName(full_name);
   try {
+    const authHeaders = await getAuthHeaders();
+    const cartEmail = authHeaders.authorization
+      ? (await sdk.store.customer.retrieve({ fields: "email" }, authHeaders)).customer.email
+      : email;
+    const { cart } = await sdk.store.cart.retrieve(id, {
+      fields: `${CART_FIELDS},*shipping_address,*billing_address,metadata`,
+    });
+    const addressMetadata = {
+      ...(cart.shipping_address?.metadata ?? {}),
+      landmark: formValues.landmark || "",
+      delivery_instructions: delivery_instructions || "",
+    };
+    const address = {
+      first_name,
+      last_name,
+      phone,
+      company: formValues.company,
+      address_1: formValues.address_1,
+      address_2: formValues.address_2,
+      city: formValues.city,
+      province: formValues.province,
+      postal_code: formValues.postal_code,
+      country_code: "in",
+      metadata: addressMetadata,
+    };
     await sdk.store.cart.update(id, {
-      email,
+      email: cartEmail,
       shipping_address: address,
       billing_address: address,
+      metadata: {
+        ...(cart.metadata ?? {}),
+        delivery_instructions: delivery_instructions || "",
+      },
     });
     refresh();
     return { ok: true };
@@ -520,4 +557,3 @@ export async function setAddresses(
     return message(e);
   }
 }
-

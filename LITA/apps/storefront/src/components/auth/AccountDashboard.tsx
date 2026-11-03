@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { HttpTypes } from "@medusajs/types";
@@ -16,6 +16,12 @@ import type { TradeApplication } from "@/lib/data/trade";
 import type { Commission } from "@/lib/data/commission";
 import { TradeApplicationModal } from "@/components/TradeApplicationModal";
 import { formatMoney } from "@/lib/format";
+import { AddressFormModal } from "@/components/address/AddressFormModal";
+import {
+  addressToFormValues,
+  normalizeIndianPhone,
+  type AddressFormValues,
+} from "@/lib/validation/address";
 import {
   useFollowedArtists,
   toggleFollowArtist,
@@ -42,6 +48,8 @@ export function AccountDashboard({
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<HttpTypes.StoreCustomerAddress | null>(null);
+  const [addressFormValues, setAddressFormValues] = useState<AddressFormValues>(() => addressToFormValues());
+  const addressTriggerRef = useRef<HTMLElement | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [commissionsModalOpen, setCommissionsModalOpen] = useState(false);
@@ -62,19 +70,8 @@ export function AccountDashboard({
   const [passwordMessage, setPasswordMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [passwordPending, startPasswordTransition] = useTransition();
 
-  // Address form state
-  const [addrFirstName, setAddrFirstName] = useState("");
-  const [addrLastName, setAddrLastName] = useState("");
-  const [addrCompany, setAddrCompany] = useState("");
-  const [addrAddress1, setAddrAddress1] = useState("");
-  const [addrAddress2, setAddrAddress2] = useState("");
-  const [addrCity, setAddrCity] = useState("");
-  const [addrProvince, setAddrProvince] = useState("");
-  const [addrPostalCode, setAddrPostalCode] = useState("");
-  const [addrCountryCode, setAddrCountryCode] = useState("us");
-  const [addrPhone, setAddrPhone] = useState("");
   const [addressError, setAddressError] = useState<string | null>(null);
-  const [addressPending, startAddressTransition] = useTransition();
+  const [addressPending, setAddressPending] = useState(false);
 
   // Logout state
   const [logoutPending, startLogoutTransition] = useTransition();
@@ -99,83 +96,66 @@ export function AccountDashboard({
     }
   }
 
-  function openNewAddressModal() {
+  function openNewAddressModal(trigger: HTMLElement) {
+    addressTriggerRef.current = trigger;
     setEditingAddress(null);
-    setAddrFirstName(customer.first_name || "");
-    setAddrLastName(customer.last_name || "");
-    setAddrCompany("");
-    setAddrAddress1("");
-    setAddrAddress2("");
-    setAddrCity("");
-    setAddrProvince("");
-    setAddrPostalCode("");
-    setAddrCountryCode("us");
-    setAddrPhone(customer.phone || "");
+    setAddressFormValues({
+      ...addressToFormValues(),
+      full_name: [customer.first_name, customer.last_name].filter(Boolean).join(" "),
+      phone: normalizeIndianPhone(customer.phone || ""),
+      country_code: "in",
+    });
     setAddressError(null);
     setAddressModalOpen(true);
   }
 
-  function openEditAddressModal(addr: HttpTypes.StoreCustomerAddress) {
+  function openEditAddressModal(addr: HttpTypes.StoreCustomerAddress, trigger: HTMLElement) {
+    addressTriggerRef.current = trigger;
     setEditingAddress(addr);
-    setAddrFirstName(addr.first_name || "");
-    setAddrLastName(addr.last_name || "");
-    setAddrCompany(addr.company || "");
-    setAddrAddress1(addr.address_1 || "");
-    setAddrAddress2(addr.address_2 || "");
-    setAddrCity(addr.city || "");
-    setAddrProvince(addr.province || "");
-    setAddrPostalCode(addr.postal_code || "");
-    setAddrCountryCode(addr.country_code || "us");
-    setAddrPhone(addr.phone || "");
+    setAddressFormValues(addressToFormValues(addr, {
+      isDefaultShipping: addr.is_default_shipping,
+    }));
     setAddressError(null);
     setAddressModalOpen(true);
   }
 
-  function handleAddressSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleAddressSubmit(values: AddressFormValues) {
     setAddressError(null);
-
-    if (!addrAddress1 || !addrCity || !addrPostalCode) {
-      setAddressError("Please complete all required address fields.");
-      return;
-    }
-
-    startAddressTransition(async () => {
-      const payload = {
-        first_name: addrFirstName,
-        last_name: addrLastName,
-        company: addrCompany,
-        address_1: addrAddress1,
-        address_2: addrAddress2,
-        city: addrCity,
-        province: addrProvince,
-        postal_code: addrPostalCode,
-        country_code: addrCountryCode.toLowerCase(),
-        phone: addrPhone,
-      };
-
-      let res;
+    setAddressPending(true);
+    try {
+      let result;
       if (editingAddress?.id) {
-        res = await updateCustomerAddress(editingAddress.id, payload);
+        result = await updateCustomerAddress(editingAddress.id, values);
       } else {
-        res = await addCustomerAddress(payload);
+        result = await addCustomerAddress(values);
       }
 
-      if (res.ok) {
+      if (result.ok) {
         setAddressModalOpen(false);
         router.refresh();
       } else {
-        setAddressError(res.error || "Failed to save address.");
+        setAddressError(result.error || "Failed to save address.");
       }
-    });
+    } finally {
+      setAddressPending(false);
+    }
   }
 
-  function handleDeleteAddress(id: string) {
-    if (!confirm("Are you sure you want to remove this address?")) return;
-    startAddressTransition(async () => {
-      await deleteCustomerAddress(id);
+  async function handleDeleteAddress() {
+    if (!editingAddress) return;
+    setAddressError(null);
+    setAddressPending(true);
+    try {
+      const result = await deleteCustomerAddress(editingAddress.id);
+      if (!result.ok) {
+        setAddressError(result.error || "Failed to delete address.");
+        return;
+      }
+      setAddressModalOpen(false);
       router.refresh();
-    });
+    } finally {
+      setAddressPending(false);
+    }
   }
 
   function handleProfileSubmit(e: React.FormEvent) {
@@ -373,7 +353,7 @@ export function AccountDashboard({
                 <div className="flex justify-center pt-2 pb-4">
                   <button
                     type="button"
-                    onClick={openNewAddressModal}
+                    onClick={(event) => openNewAddressModal(event.currentTarget)}
                     className="inline-flex items-center justify-center px-8 py-2.5 rounded-full border border-[#222222] bg-white text-[#222222] text-[14px] hover:bg-[#222222] hover:text-white transition-colors duration-200 cursor-pointer"
                   >
                     Add new address +
@@ -395,6 +375,9 @@ export function AccountDashboard({
                         {addr.company && <p className="text-xs text-[#777777]">{addr.company}</p>}
                         <p>{addr.address_1}</p>
                         {addr.address_2 && <p>{addr.address_2}</p>}
+                        {typeof addr.metadata?.landmark === "string" && addr.metadata.landmark && (
+                          <p>{addr.metadata.landmark}</p>
+                        )}
                         <p>
                           {addr.city}
                           {addr.province ? `, ${addr.province}` : ""} {addr.postal_code}
@@ -408,17 +391,10 @@ export function AccountDashboard({
                       <div className="flex items-center gap-4 mt-4 pt-3 border-t border-[#f0f0f0] text-xs">
                         <button
                           type="button"
-                          onClick={() => openEditAddressModal(addr)}
+                          onClick={(event) => openEditAddressModal(addr, event.currentTarget)}
                           className="text-[#222222] underline underline-offset-2 hover:opacity-75 cursor-pointer"
                         >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteAddress(addr.id)}
-                          className="text-[#888888] hover:text-red-700 underline underline-offset-2 transition-colors cursor-pointer"
-                        >
-                          Remove
+                          Edit address
                         </button>
                       </div>
                     </div>
@@ -428,7 +404,7 @@ export function AccountDashboard({
                 <div className="flex justify-center pt-2">
                   <button
                     type="button"
-                    onClick={openNewAddressModal}
+                    onClick={(event) => openNewAddressModal(event.currentTarget)}
                     className="inline-flex items-center justify-center px-8 py-2.5 rounded-full border border-[#222222] bg-white text-[#222222] text-[14px] hover:bg-[#222222] hover:text-white transition-colors duration-200 cursor-pointer"
                   >
                     Add new address +
@@ -548,185 +524,21 @@ export function AccountDashboard({
         </main>
       </div>
 
-      {/* 3. Address Modal (Add / Edit) */}
       {addressModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white border border-[#EAEAEA] max-w-[540px] w-full p-6 sm:p-8 text-left max-h-[90vh] overflow-y-auto shadow-xl">
-            <div className="flex items-center justify-between pb-4 border-b border-[#EAEAEA] mb-6">
-              <h3 className="font-cormorant text-2xl text-[#111111]">
-                {editingAddress ? "Edit Address" : "Add New Address"}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setAddressModalOpen(false)}
-                className="text-neutral-400 hover:text-black text-xl cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleAddressSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                    First Name
-                  </label>
-                  <input
-                    type="text"
-                    value={addrFirstName}
-                    onChange={(e) => setAddrFirstName(e.target.value)}
-                    required
-                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                    Last Name
-                  </label>
-                  <input
-                    type="text"
-                    value={addrLastName}
-                    onChange={(e) => setAddrLastName(e.target.value)}
-                    required
-                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                  Company (optional)
-                </label>
-                <input
-                  type="text"
-                  value={addrCompany}
-                  onChange={(e) => setAddrCompany(e.target.value)}
-                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                  Street Address
-                </label>
-                <input
-                  type="text"
-                  value={addrAddress1}
-                  onChange={(e) => setAddrAddress1(e.target.value)}
-                  placeholder="House number and street name"
-                  required
-                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                  Apartment, suite, unit (optional)
-                </label>
-                <input
-                  type="text"
-                  value={addrAddress2}
-                  onChange={(e) => setAddrAddress2(e.target.value)}
-                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    value={addrCity}
-                    onChange={(e) => setAddrCity(e.target.value)}
-                    required
-                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                    State / Province
-                  </label>
-                  <input
-                    type="text"
-                    value={addrProvince}
-                    onChange={(e) => setAddrProvince(e.target.value)}
-                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                    Postal Code
-                  </label>
-                  <input
-                    type="text"
-                    value={addrPostalCode}
-                    onChange={(e) => setAddrPostalCode(e.target.value)}
-                    required
-                    className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                    Country
-                  </label>
-                  <select
-                    value={addrCountryCode}
-                    onChange={(e) => setAddrCountryCode(e.target.value)}
-                    className="w-full h-11 px-3 border border-[#d8d8d8] bg-white text-[14px] focus:outline-none focus:border-black"
-                  >
-                    <option value="us">United States</option>
-                    <option value="gb">United Kingdom</option>
-                    <option value="ca">Canada</option>
-                    <option value="au">Australia</option>
-                    <option value="in">India</option>
-                    <option value="fr">France</option>
-                    <option value="de">Germany</option>
-                    <option value="it">Italy</option>
-                    <option value="es">Spain</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#555555] uppercase tracking-wider mb-1">
-                  Phone (for delivery)
-                </label>
-                <input
-                  type="tel"
-                  value={addrPhone}
-                  onChange={(e) => setAddrPhone(e.target.value)}
-                  className="w-full h-11 px-3 border border-[#d8d8d8] text-[14px] focus:outline-none focus:border-black"
-                />
-              </div>
-
-              {addressError && (
-                <p className="text-xs text-red-600 pt-1">{addressError}</p>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#EAEAEA]">
-                <button
-                  type="button"
-                  onClick={() => setAddressModalOpen(false)}
-                  className="px-5 py-2 text-[14px] text-neutral-600 hover:text-black cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={addressPending}
-                  className="inline-flex items-center justify-center px-6 py-2.5 rounded-full bg-[#111111] text-white text-[14px] hover:bg-neutral-800 transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {addressPending ? "Saving…" : "Save Address"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AddressFormModal
+          open={addressModalOpen}
+          initialValues={addressFormValues}
+          isLoggedIn
+          pending={addressPending}
+          error={addressError}
+          triggerRef={addressTriggerRef}
+          onClose={() => {
+            setAddressModalOpen(false);
+            setAddressError(null);
+          }}
+          onSubmit={handleAddressSubmit}
+          onDelete={editingAddress ? handleDeleteAddress : undefined}
+        />
       )}
 
       {/* 4. Edit Profile Details Modal */}
