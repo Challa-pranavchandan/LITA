@@ -138,6 +138,8 @@ export async function listArtworks(query: ArtworkQuery = {}): Promise<ArtworkPag
   }
 }
 
+import { CURATED_ARTWORKS, curatedToStoreProduct } from "@/lib/data/curated-artworks";
+
 export async function getProduct(
   handle: string
 ): Promise<HttpTypes.StoreProduct | null> {
@@ -145,21 +147,43 @@ export async function getProduct(
   const cached = getCached<HttpTypes.StoreProduct>(cacheKey);
   if (cached) return cached;
 
-  const region = await getRegion();
-  if (!region) return null;
-  try {
-    const { products } = await sdk.store.product.list({
-      handle,
-      region_id: region.id,
-      limit: 1,
-      fields: PRODUCT_FIELDS + ",*images",
-    });
-    const product = products[0] ?? null;
-    if (product) setCached(cacheKey, product, 60);
-    return product;
-  } catch {
-    return null;
+  // Check curated catalogue first if handle matches directly
+  if (CURATED_ARTWORKS[handle]) {
+    const curated = curatedToStoreProduct(CURATED_ARTWORKS[handle]);
+    setCached(cacheKey, curated, 120);
+    return curated;
   }
+
+  const region = await getRegion();
+  if (region) {
+    try {
+      const { products } = await sdk.store.product.list({
+        handle,
+        region_id: region.id,
+        limit: 1,
+        fields: PRODUCT_FIELDS + ",*images",
+      });
+      const product = products[0] ?? null;
+      if (product) {
+        setCached(cacheKey, product, 60);
+        return product;
+      }
+    } catch {
+      // Fall through to curated fallback check
+    }
+  }
+
+  // Check curated catalogue case-insensitively or by fuzzy match
+  const foundCurated = Object.values(CURATED_ARTWORKS).find(
+    (c) => c.handle.toLowerCase() === handle.toLowerCase()
+  );
+  if (foundCurated) {
+    const curated = curatedToStoreProduct(foundCurated);
+    setCached(cacheKey, curated, 120);
+    return curated;
+  }
+
+  return null;
 }
 
 /** Other works from the same collection, falling back to the newest works. */
@@ -172,11 +196,26 @@ export async function listRelated(
   });
   const others = page.products.filter((p) => p.id !== product.id);
   if (others.length >= count) return others.slice(0, count);
+
   const fallback = await listArtworks({});
   const ids = new Set(others.map((p) => p.id).concat(product.id));
-  return others
-    .concat(fallback.products.filter((p) => !ids.has(p.id)))
-    .slice(0, count);
+  const combined = others.concat(fallback.products.filter((p) => !ids.has(p.id)));
+
+  if (combined.length >= count) return combined.slice(0, count);
+
+  // Supplement with curated artworks if store has limited catalog
+  const curatedFallback = Object.values(CURATED_ARTWORKS)
+    .filter((c) => c.id !== product.id && c.handle !== product.handle)
+    .map(curatedToStoreProduct);
+
+  for (const c of curatedFallback) {
+    if (!ids.has(c.id)) {
+      combined.push(c);
+      ids.add(c.id);
+    }
+  }
+
+  return combined.slice(0, count);
 }
 
 export const listCategories = cache(
