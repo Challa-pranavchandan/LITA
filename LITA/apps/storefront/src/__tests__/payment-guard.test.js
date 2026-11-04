@@ -4,19 +4,37 @@ const assert = require("node:assert")
 const RAZORPAY_PREFIX = "pp_razorpay"
 const RAZORPAY_PROVIDER_ID = "pp_razorpay_razorpay"
 const MANUAL_PROVIDER_ID = "pp_system_default"
+const UPI_MANUAL_PROVIDER_ID = "pp_upimanual_upimanual"
+
+function isUpiManualProvider(id) {
+  return id === UPI_MANUAL_PROVIDER_ID
+}
 
 function isRazorpayProvider(id) {
   if (!id) return false
   return id === RAZORPAY_PROVIDER_ID || id.startsWith(RAZORPAY_PREFIX)
 }
 
-function isSupportedProvider(id, nodeEnv = process.env.NODE_ENV || "development") {
+function isSupportedProvider(
+  id,
+  nodeEnv = process.env.NODE_ENV || "development",
+  enableUpiManual = process.env.NEXT_PUBLIC_ENABLE_UPI_MANUAL === "true"
+) {
   if (isRazorpayProvider(id)) return true
+  if (isUpiManualProvider(id)) return enableUpiManual
   if (id === MANUAL_PROVIDER_ID && nodeEnv !== "production") return true
   return false
 }
 
-function assertAllowedProvider(providerId, nodeEnv = process.env.NODE_ENV || "development") {
+function assertAllowedProvider(
+  providerId,
+  nodeEnv = process.env.NODE_ENV || "development",
+  enableUpiManual = process.env.NEXT_PUBLIC_ENABLE_UPI_MANUAL === "true"
+) {
+  if (isUpiManualProvider(providerId)) {
+    if (enableUpiManual) return
+    throw new Error("UPI manual payment is not enabled.")
+  }
   if (nodeEnv !== "production") return
   if (!isRazorpayProvider(providerId)) {
     throw new Error(
@@ -107,6 +125,47 @@ describe("Storefront Payment Guard & Provider Enforcement", () => {
       assert.strictEqual(isRazorpayProvider(""), false)
       assert.strictEqual(isRazorpayProvider(null), false)
       assert.strictEqual(isRazorpayProvider(undefined), false)
+    })
+  })
+
+  describe("manual UPI feature flag", () => {
+    test("rejects manual UPI when the flag is off in production", () => {
+      assert.strictEqual(
+        isSupportedProvider(UPI_MANUAL_PROVIDER_ID, "production", false),
+        false
+      )
+      assert.throws(
+        () => assertAllowedProvider(UPI_MANUAL_PROVIDER_ID, "production", false),
+        { message: "UPI manual payment is not enabled." }
+      )
+    })
+
+    test("accepts manual UPI when the flag is on and still rejects pp_system_default", () => {
+      assert.strictEqual(
+        isSupportedProvider(UPI_MANUAL_PROVIDER_ID, "production", true),
+        true
+      )
+      assert.doesNotThrow(() =>
+        assertAllowedProvider(UPI_MANUAL_PROVIDER_ID, "production", true)
+      )
+      assert.strictEqual(isSupportedProvider(MANUAL_PROVIDER_ID, "production", true), false)
+      assert.throws(() =>
+        assertAllowedProvider(MANUAL_PROVIDER_ID, "production", true)
+      )
+    })
+
+    test("Razorpay remains accepted regardless of the UPI feature flag", () => {
+      assert.strictEqual(
+        isSupportedProvider(RAZORPAY_PROVIDER_ID, "production", false),
+        true
+      )
+      assert.strictEqual(
+        isSupportedProvider(RAZORPAY_PROVIDER_ID, "production", true),
+        true
+      )
+      assert.doesNotThrow(() =>
+        assertAllowedProvider(RAZORPAY_PROVIDER_ID, "production", false)
+      )
     })
   })
 })

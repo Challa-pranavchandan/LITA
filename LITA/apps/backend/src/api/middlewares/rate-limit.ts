@@ -18,6 +18,9 @@ export type RateLimitAction =
   | "wishlist"
   | "contact"
   | "reset"
+  | "upi_proof"
+  | "upi_upload"
+  | "upi_lookup"
 
 export function checkBackendRateLimit(
   key: string,

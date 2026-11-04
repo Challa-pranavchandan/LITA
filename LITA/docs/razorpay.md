@@ -190,7 +190,7 @@ npm run test:unit -- src/modules/razorpay/__tests__/razorpay-provider.unit.spec.
 > [!IMPORTANT]
 > **Production Region & Payment Configuration**
 > In **Medusa Admin** > **Settings** > **Regions**:
-> - The **India** region (`in`) must list **only** the Razorpay provider (`pp_razorpay_razorpay`). The manual payment provider (`pp_system_default`) must be removed from all active regions.
+> - The **India** region (`in`) may list Razorpay (`pp_razorpay_razorpay`), plus the manual UPI provider (`pp_upimanual_upimanual`) only when `ENABLE_UPI_MANUAL=true`. Remove `pp_system_default` from all active regions.
 > - The currency must be strictly **INR** (`₹`).
 > - No EUR/USD demo region may exist in the database.
 >
@@ -199,4 +199,4 @@ npm run test:unit -- src/modules/razorpay/__tests__/razorpay-provider.unit.spec.
 > cd apps/backend
 > npm run check:prod-config
 > ```
-> This script exits non-zero if any non-Razorpay provider or non-INR currency is configured on any region.
+> This script exits non-zero if any provider outside the enabled set (Razorpay, plus UPI manual when `ENABLE_UPI_MANUAL=true`) or any non-INR currency is configured on any region.

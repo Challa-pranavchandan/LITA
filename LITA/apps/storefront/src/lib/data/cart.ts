@@ -8,7 +8,11 @@ import { sdk } from "@/lib/medusa"
 import { getRegion } from "@/lib/data/catalog"
 import { getAuthHeaders } from "@/lib/data/customer"
 
-import { assertAllowedProvider, isRazorpayProvider } from "@/lib/payment-guard"
+import {
+  assertAllowedProvider,
+  isRazorpayProvider,
+  isUpiManualProvider,
+} from "@/lib/payment-guard"
 import {
   checkoutAddressSchema,
   splitFullName,
@@ -341,18 +345,32 @@ export async function startPayment(providerId: string): Promise<ActionResult> {
 
 /**
  * Completes the cart. With Medusa's built-in manual provider (pp_system_default) this
- * places the order straight away in dev. In production, only verified Razorpay payment
- * sessions are allowed.
+ * places the order straight away in dev. Production completion requires a Razorpay
+ * session or an enabled UPI manual session.
  */
-export async function placeOrder(): Promise<ActionResult> {
+export async function placeOrder({
+  upiManual = false,
+}: {
+  upiManual?: boolean
+} = {}): Promise<ActionResult> {
   const id = await cartId();
   if (!id) return { ok: false, error: "Your bag is empty." };
 
   if (process.env.NODE_ENV === "production") {
     const cart = await getCart();
     const activeSessions = cart?.payment_collection?.payment_sessions ?? [];
-    const hasRazorpay = activeSessions.some((s) => isRazorpayProvider(s.provider_id));
-    if (!hasRazorpay) {
+    const hasAllowedSession = upiManual
+      ? process.env.NEXT_PUBLIC_ENABLE_UPI_MANUAL === "true" &&
+        activeSessions.some((session) => isUpiManualProvider(session.provider_id))
+      : activeSessions.some((session) => isRazorpayProvider(session.provider_id));
+    if (!hasAllowedSession) {
+      if (upiManual) {
+        return {
+          ok: false,
+          error:
+            "UPI manual payment is unavailable for this cart. Please refresh checkout and select an available payment method.",
+        };
+      }
       throw new Error(
         "Payment provider is not allowed in production. Only Razorpay is accepted."
       );
@@ -381,7 +399,9 @@ export async function placeOrder(): Promise<ActionResult> {
     return { ok: false, error: message(e) };
   }
   refresh();
-  redirect(`/order/${orderId}`);
+  redirect(
+    upiManual ? `/order/${orderId}?pay=upi` : `/order/${orderId}`
+  );
 }
 
 export async function getOrder(

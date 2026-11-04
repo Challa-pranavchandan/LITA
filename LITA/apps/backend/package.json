@@ -22,9 +22,10 @@
     "test:resend": "ts-node ./src/scripts/test-resend.ts",
     "test:r2": "ts-node ./src/scripts/test-r2-upload.ts",
     "test:razorpay": "ts-node ./src/scripts/test-razorpay.ts",
+    "test:upi-flow": "ts-node ./src/scripts/test-upi-flow.ts",
     "test:integration:http": "TEST_TYPE=integration:http NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",
     "test:integration:modules": "TEST_TYPE=integration:modules NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",
-    "test:unit": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
+    "test:unit": "node --experimental-vm-modules -e \"process.env.TEST_TYPE='unit'; require('jest').run(['--silent','--runInBand','--forceExit'])\"",
     "check:prod-config": "npx medusa exec ./src/scripts/check-production-config.ts"
   },
   "dependencies": {

@@ -4,7 +4,10 @@ import {
   Modules,
   OrderWorkflowEvents,
 } from "@medusajs/framework/utils"
-import { orderPlacedTemplate } from "../modules/resend/emails/templates"
+import {
+  orderPlacedTemplate,
+  upiOrderPlacedTemplate,
+} from "../modules/resend/emails/templates"
 
 export default async function orderPlacedHandler({
   event: { data },
@@ -29,24 +32,31 @@ export default async function orderPlacedHandler({
     try {
       const query: any = container.resolve(ContainerRegistrationKeys.QUERY)
       if (query?.graph) {
+        const orderFields = [
+          "id",
+          "display_id",
+          "status",
+          "email",
+          "total",
+          "subtotal",
+          "shipping_total",
+          "tax_total",
+          "discount_total",
+          "currency_code",
+          "created_at",
+          "items.*",
+          "shipping_address.*",
+          "customer.*",
+        ]
+        if (process.env.ENABLE_UPI_MANUAL === "true") {
+          orderFields.push(
+            "payment_collections.payment_sessions.provider_id",
+            "payment_collections.payments.provider_id"
+          )
+        }
         const { data: orders } = await query.graph({
           entity: "order",
-          fields: [
-            "id",
-            "display_id",
-            "status",
-            "email",
-            "total",
-            "subtotal",
-            "shipping_total",
-            "tax_total",
-            "discount_total",
-            "currency_code",
-            "created_at",
-            "items.*",
-            "shipping_address.*",
-            "customer.*",
-          ],
+          fields: orderFields,
           filters: { id: data.id },
         })
         order = orders?.[0]
@@ -59,8 +69,12 @@ export default async function orderPlacedHandler({
     if (!order) {
       try {
         const orderService: any = container.resolve(Modules.ORDER)
+        const relations = ["items", "shipping_address"]
+        if (process.env.ENABLE_UPI_MANUAL === "true") {
+          relations.push("payment_collections", "payment_collections.payments")
+        }
         order = await orderService.retrieveOrder(data.id, {
-          relations: ["items", "shipping_address"],
+          relations,
         })
       } catch (svcErr: any) {
         logger.error(`[order-placed] Could not retrieve order ${data.id}: ${svcErr?.message}`)
@@ -122,13 +136,21 @@ export default async function orderPlacedHandler({
       storefrontUrl,
     }
 
-    const { subject, html } = orderPlacedTemplate(templateData)
+    const isUpiOrder =
+      process.env.ENABLE_UPI_MANUAL === "true" &&
+      order.payment_collections?.some((collection: any) =>
+        [...(collection.payment_sessions || []), ...(collection.payments || [])]
+          .some((payment: any) => payment.provider_id === "pp_upimanual_upimanual")
+      )
+    const { subject, html } = isUpiOrder
+      ? upiOrderPlacedTemplate(templateData)
+      : orderPlacedTemplate(templateData)
 
     const notificationService: any = container.resolve(Modules.NOTIFICATION)
     await notificationService.createNotifications({
       to: email,
       channel: "email",
-      template: "order-placed",
+      template: isUpiOrder ? "upi-order-placed" : "order-placed",
       data: templateData,
       content: { subject, html },
     })

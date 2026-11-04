@@ -699,3 +699,148 @@ export function newsletterConfirmationTemplate(data: NewsletterConfirmationTempl
   }
 }
 
+export interface UpiPaymentEmailData {
+  referenceCode: string
+  amount: number
+  currencyCode: string
+  orderId: string
+  orderNumber: string
+  storefrontUrl: string
+  customerName?: string
+  vpa?: string
+  payeeName?: string
+  deadline?: string
+  utrLast4?: string
+  rejectReason?: string
+  adminUrl?: string
+}
+
+function upiOrderUrl(data: UpiPaymentEmailData): string {
+  return `${data.storefrontUrl.replace(/\/$/, "")}/order/${encodeURIComponent(data.orderId)}?pay=upi`
+}
+
+function upiEmailButton(url: string, label: string): string {
+  return `<div style="margin: 28px 0; text-align: left;"><a href="${escapeHtml(url)}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">${escapeHtml(label)}</a></div>`
+}
+
+export function upiPaymentInstructionsTemplate(data: UpiPaymentEmailData): {
+  subject: string
+  html: string
+} {
+  const subject = `Complete your UPI payment — ${data.orderNumber}`
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">Complete your UPI payment</h1>
+    <p style="font-size: 14px; line-height: 1.6; color: #555555;">${data.customerName ? `Dear ${escapeHtml(data.customerName)}, ` : ""}Your order ${escapeHtml(data.orderNumber)} is awaiting payment. We will confirm it after your UPI payment is verified.</p>
+    <p style="font-size: 14px; line-height: 1.6; color: #555555;"><strong>Reference:</strong> ${escapeHtml(data.referenceCode)}<br /><strong>Exact amount:</strong> ${formatCurrency(data.amount, data.currencyCode)}<br /><strong>UPI ID:</strong> ${escapeHtml(data.vpa || "")}<br /><strong>Payee:</strong> ${escapeHtml(data.payeeName || "")}<br /><strong>Payment deadline:</strong> ${escapeHtml(data.deadline || "")}</p>
+    ${upiEmailButton(upiOrderUrl(data), "Pay by UPI")}
+    <p style="font-size: 12px; line-height: 1.5; color: #888888;">Include the reference code in your payment note so we can match your payment.</p>`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: `Complete UPI payment for ${data.orderNumber}.`,
+      contentHtml,
+    }),
+  }
+}
+
+export function upiProofReceivedStudioTemplate(data: UpiPaymentEmailData): {
+  subject: string
+  html: string
+} {
+  const subject = `UPI proof submitted — ${data.referenceCode}`
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">UPI proof submitted</h1>
+    <p style="font-size: 14px; line-height: 1.6; color: #555555;"><strong>Reference:</strong> ${escapeHtml(data.referenceCode)}<br /><strong>Order:</strong> ${escapeHtml(data.orderNumber)}<br /><strong>Amount:</strong> ${formatCurrency(data.amount, data.currencyCode)}<br /><strong>UTR ending:</strong> ${escapeHtml(data.utrLast4 || "Not provided")}</p>
+    ${upiEmailButton(data.adminUrl || "", "Review UPI Payments")}`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: `New UPI proof for ${data.orderNumber}.`,
+      contentHtml,
+    }),
+  }
+}
+
+export function upiPaymentVerifiedTemplate(data: UpiPaymentEmailData): {
+  subject: string
+  html: string
+} {
+  const subject = `UPI payment received — ${data.orderNumber}`
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">Payment received</h1>
+    <p style="font-size: 14px; line-height: 1.6; color: #555555;">We have verified your UPI payment of ${formatCurrency(data.amount, data.currencyCode)} for order ${escapeHtml(data.orderNumber)} (reference ${escapeHtml(data.referenceCode)}). Thank you.</p>
+    ${upiEmailButton(upiOrderUrl(data), "View Your Order")}`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: `Your UPI payment for ${data.orderNumber} has been verified.`,
+      contentHtml,
+    }),
+  }
+}
+
+export function upiPaymentRejectedTemplate(data: UpiPaymentEmailData): {
+  subject: string
+  html: string
+} {
+  const subject = `Action needed for your UPI payment — ${data.orderNumber}`
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">Please resubmit your payment proof</h1>
+    <p style="font-size: 14px; line-height: 1.6; color: #555555;">We could not verify the proof for order ${escapeHtml(data.orderNumber)} (reference ${escapeHtml(data.referenceCode)}). Reason: <strong>${escapeHtml(data.rejectReason || "Please contact the studio.")}</strong></p>
+    ${upiEmailButton(upiOrderUrl(data), "Resubmit Proof")}`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: `Please review your UPI payment proof for ${data.orderNumber}.`,
+      contentHtml,
+    }),
+  }
+}
+
+export function upiPaymentExpiredTemplate(data: UpiPaymentEmailData): {
+  subject: string
+  html: string
+} {
+  const subject = `UPI payment window expired — ${data.orderNumber}`
+  const contentHtml = `
+    <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 500; color: #1a1a1a;">UPI payment window expired</h1>
+    <p style="font-size: 14px; line-height: 1.6; color: #555555;">The UPI payment window for order ${escapeHtml(data.orderNumber)} (reference ${escapeHtml(data.referenceCode)}) has expired. We can no longer accept payment through this order. You are welcome to browse our collection again.</p>
+    ${upiEmailButton(`${data.storefrontUrl.replace(/\/$/, "")}/artworks`, "Visit the Shop")}`
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: `The UPI payment window for ${data.orderNumber} has expired.`,
+      contentHtml,
+    }),
+  }
+}
+
+export function upiOrderPlacedTemplate(data: OrderPlacedTemplateData): {
+  subject: string
+  html: string
+} {
+  const rendered = orderPlacedTemplate(data)
+  const subject = rendered.subject.replace("Order Confirmed:", "Order Received:")
+  const html = rendered.html
+    .replace("Order Confirmed:", "Order Received:")
+    .replace(
+      "and our atelier is preparing your artwork for dispatch.",
+      "and will confirm it once your UPI payment is verified."
+    )
+    .replace(
+      "We are preparing your artwork.",
+      "We will confirm your order once your UPI payment is verified."
+    )
+
+  return { subject, html }
+}

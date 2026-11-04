@@ -19,6 +19,7 @@ describe("Transactional Email Notification Subscribers", () => {
 
   describe("orderPlacedHandler", () => {
     it("retrieves order details and dispatches order-placed notification", async () => {
+      process.env.ENABLE_UPI_MANUAL = "true"
       const mockLogger = {
         info: jest.fn(),
         warn: jest.fn(),
@@ -44,6 +45,11 @@ describe("Transactional Email Notification Subscribers", () => {
                 last_name: "Mehta",
                 city: "Delhi",
               },
+              payment_collections: [
+                {
+                  payments: [{ provider_id: "pp_razorpay_razorpay" }],
+                },
+              ],
             },
           ],
         }),
@@ -71,11 +77,75 @@ describe("Transactional Email Notification Subscribers", () => {
           template: "order-placed",
           content: expect.objectContaining({
             subject: expect.stringContaining("Order Confirmed: #101"),
+            html: expect.stringContaining(
+              "and our atelier is preparing your artwork for dispatch."
+            ),
           }),
         })
       )
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining("Dispatched order confirmation email for order #101")
+      )
+    })
+
+    it("sends a payment-pending confirmation for UPI orders", async () => {
+      process.env.ENABLE_UPI_MANUAL = "true"
+      const mockLogger = {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+      }
+      const mockNotificationService = {
+        createNotifications: jest.fn().mockResolvedValue({ id: "notif_upi_123" }),
+      }
+      const mockQuery = {
+        graph: jest.fn().mockResolvedValue({
+          data: [
+            {
+              id: "order_upi",
+              display_id: 102,
+              email: "buyer@example.com",
+              total: 25000,
+              subtotal: 25000,
+              currency_code: "inr",
+              items: [{ title: "Serene Meadow", quantity: 1, unit_price: 25000 }],
+              payment_collections: [
+                {
+                  payments: [{ provider_id: "pp_upimanual_upimanual" }],
+                },
+              ],
+            },
+          ],
+        }),
+      }
+      const container = {
+        resolve: jest.fn((key) => {
+          if (key === ContainerRegistrationKeys.LOGGER) return mockLogger
+          if (key === ContainerRegistrationKeys.QUERY) return mockQuery
+          if (key === Modules.NOTIFICATION) return mockNotificationService
+          return null
+        }),
+      } as any
+
+      await orderPlacedHandler({
+        event: { name: "order.placed", data: { id: "order_upi" } },
+        container,
+        pluginOptions: {},
+      })
+
+      expect(mockNotificationService.createNotifications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "buyer@example.com",
+          channel: "email",
+          template: "upi-order-placed",
+          content: expect.objectContaining({
+            subject: expect.stringContaining("Order Received: #102"),
+            html: expect.stringContaining(
+              "will confirm it once your UPI payment is verified."
+            ),
+          }),
+        })
       )
     })
   })

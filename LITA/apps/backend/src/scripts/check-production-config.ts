@@ -2,6 +2,17 @@ import { MedusaContainer } from "@medusajs/framework"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
 const RAZORPAY_PREFIX = "pp_razorpay"
+export const UPI_MANUAL_PROVIDER_ID = "pp_upimanual_upimanual"
+
+export function isAllowedProductionPaymentProvider(
+  providerId: string,
+  enableUpiManual = process.env.ENABLE_UPI_MANUAL === "true"
+): boolean {
+  return (
+    providerId === "pp_razorpay_razorpay" ||
+    (enableUpiManual && providerId === UPI_MANUAL_PROVIDER_ID)
+  )
+}
 
 /**
  * check-production-config
@@ -9,8 +20,8 @@ const RAZORPAY_PREFIX = "pp_razorpay"
  * Run with:
  *   cd apps/backend && npm run check:prod-config
  *
- * Exits 1 if any region has a payment provider other than a Razorpay provider,
- * or if any region uses a currency other than INR.
+ * Exits 1 if any region has a payment provider other than Razorpay (and
+ * optionally manual UPI), or if any region uses a currency other than INR.
  */
 export default async function checkProductionConfig({
   container,
@@ -57,9 +68,11 @@ export default async function checkProductionConfig({
     }
 
     for (const provider of providers) {
-      if (provider.id !== "pp_razorpay_razorpay") {
+      if (!isAllowedProductionPaymentProvider(provider.id)) {
         failures.push(
-          `${regionLabel} has non-Razorpay provider "${provider.id}" — only "pp_razorpay_razorpay" is allowed`
+          process.env.ENABLE_UPI_MANUAL === "true"
+            ? `${regionLabel} has unsupported provider "${provider.id}" — only "pp_razorpay_razorpay" and "${UPI_MANUAL_PROVIDER_ID}" are allowed`
+            : `${regionLabel} has non-Razorpay provider "${provider.id}" — only "pp_razorpay_razorpay" is allowed`
         )
       }
     }
@@ -72,14 +85,15 @@ export default async function checkProductionConfig({
     }
     logger.error(
       "Fix: In Medusa Admin > Settings > Regions, ensure every region uses INR " +
-      "and has only the Razorpay provider (pp_razorpay_razorpay) enabled. " +
+      `and has only ${process.env.ENABLE_UPI_MANUAL === "true" ? "Razorpay or manual UPI" : "the Razorpay provider"} enabled. ` +
       "Delete any demo EUR/USD regions."
     )
     process.exit(1)
   }
 
   logger.info(
-    `Production configuration check PASSED: ${regions.length} region(s) checked, ` +
-    "all use INR and Razorpay only."
+    process.env.ENABLE_UPI_MANUAL === "true"
+      ? `Production configuration check PASSED: ${regions.length} region(s) checked, all use INR and Razorpay or manual UPI only.`
+      : `Production configuration check PASSED: ${regions.length} region(s) checked, all use INR and Razorpay only.`
   )
 }

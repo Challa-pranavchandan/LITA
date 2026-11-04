@@ -365,14 +365,13 @@
     - **Backend Workflow Typing:** Fixed `StepResponse` generic types in `apps/backend/src/workflows/reconcile-razorpay-order.ts` and corrected `createServiceZones` argument structure in `apps/backend/src/scripts/seed-india-shipping.ts`.
     - **Exit Test Passed:** `npm ci && npm run lint && npm run test && npm run build` all complete successfully with zero ignored errors from a clean clone.
 
-26. **B1 — Removal of Manual Payment Path (Branch `b1-remove-manual-payment`):**
-    - **Storefront Checkout Flow:** Updated `isSupportedProvider` and `providerLabel` in `apps/storefront/src/components/CheckoutFlow.tsx` to strictly restrict `pp_system_default` to non-production environments (`process.env.NODE_ENV !== "production"`). Hides the `"Manual Payment (Pay Offline / Test)"` label and generic `"Place order"` button in production, cleanly displaying the *"Payment isn't switched on..."* notice when no supported provider is enabled.
-    - **Server-Side Action & Data Guards:** Created centralized `apps/storefront/src/lib/payment-guard.ts` module with `isRazorpayProvider`, `isSupportedProvider`, and `assertAllowedProvider`. Integrated server-side assertion into `startPayment`, `initiatePaymentSession`, and `placeOrder` in `apps/storefront/src/lib/data/cart.ts` so clients cannot bypass the UI guard. Gated `pp_system_default` in `paymentInfoMap` in `constants.tsx`.
-    - **Backend Configuration Safety Script:** Created `apps/backend/src/scripts/check-production-config.ts` (runnable via `npm run check:prod-config`), inspecting all database regions via Medusa Query Graph API and enforcing strictly INR currency and `pp_razorpay_razorpay` provider only, exiting with code 1 if demo regions or unauthorized payment providers exist.
+26. **B1 — Removal of Uncontrolled Manual Payment Path (Branch `b1-remove-manual-payment`):**
+    - **Storefront Checkout Flow:** Restricted `pp_system_default` to non-production environments (`process.env.NODE_ENV !== "production"`); production manual UPI is a separate option gated by `NEXT_PUBLIC_ENABLE_UPI_MANUAL=true` and provider availability. Razorpay remains the default.
+    - **Server-Side Action & Data Guards:** Created centralized `apps/storefront/src/lib/payment-guard.ts` module with `isRazorpayProvider`, `isSupportedProvider`, and `assertAllowedProvider`. Integrated server-side assertions into `startPayment`, `initiatePaymentSession`, and `placeOrder`; UPI is accepted only when `NEXT_PUBLIC_ENABLE_UPI_MANUAL=true`. Gated `pp_system_default` in `paymentInfoMap` in `constants.tsx`.
+    - **Backend Configuration Safety Script:** Created `apps/backend/src/scripts/check-production-config.ts` (runnable via `npm run check:prod-config`), inspecting all database regions via Medusa Query Graph API and enforcing strictly INR currency and only the enabled provider set: Razorpay, plus UPI manual only when `ENABLE_UPI_MANUAL=true`; `pp_system_default` and other providers remain rejected.
     - **Seed Script Guard:** Verified `apps/backend/src/migration-scripts/initial-data-seed.ts` is guarded with `SEED_DEMO_DATA=true` so EU/EUR demo data and `pp_system_default` never seed against a production database.
     - **Documentation:** Added Section 9 *"Production Checklist: Regions & Payment Providers"* to `docs/razorpay.md`.
     - **Automated Tests:** Created unit test suite in `apps/storefront/src/__tests__/payment-guard.test.js` validating all production and non-production provider acceptance/rejection scenarios (25 tests passing).
-
 27. **B2 — Hardening of ISR Revalidate Endpoint (Revalidate Auth & Secret Guard):**
     - **Constant-Time Verification Utility:** Created `apps/storefront/src/lib/security/revalidate-auth.ts` exporting `verifyRevalidateSecret(provided)`. Enforces minimum 32-character length on `process.env.REVALIDATE_SECRET`, checks for non-empty provided secret string, and uses SHA-256 hashing with `crypto.timingSafeEqual` for constant-time comparison.
     - **Secure POST-Only Route Handler:** Completely removed the `GET` handler in `apps/storefront/src/app/api/revalidate/route.ts` to prevent query secrets from leaking into server access logs and browser histories. Prioritizes the `x-revalidate-secret` request header (falling back to `body.secret` for backwards compatibility), verifies via `verifyRevalidateSecret`, responds with generic 401 on failure, retains cache eviction (`clearCatalogCache`, tags, and paths), and returns a minimal response (`{ ok: true, revalidated: true }`).
@@ -478,6 +477,12 @@
       - Updated `apps/storefront/src/components/SavedWorks.tsx`: detects unresolvable/deleted catalog products and automatically prunes them from customer wishlist in background.
     - **Comprehensive Documentation:** Created `docs/saved-feature.md` covering architecture diagrams, data flow, API contracts, merge/logout semantics, security, and test coverage.
     - **Automated Tests:** 13 backend unit tests in `apps/backend/src/api/store/customers/me/wishlist/__tests__/wishlist.unit.spec.ts` (all passed) and 8 storefront tests in `apps/storefront/src/__tests__/saved-feature.test.js` (all passed; 65/65 storefront suite passing).
+34. **Direct UPI with Manual Verification:**
+    - **Modules & Configuration:** Added the `upi_payment` Medusa module and migration, plus the flag-gated `upimanual` payment provider. Backend and storefront flags control provider registration and checkout visibility; the existing Razorpay provider and reconciliation flow are unchanged.
+    - **Customer Checkout & Proof:** Added server-computed order payment records, signed proof tokens, rate-limited store lookup/upload/proof routes, private R2 screenshot uploads, UTR validation/deduplication, and the storefront checkout option and order-page QR/proof panel.
+    - **Admin & Expiry:** Added UPI Payments admin listing, verification/capture, rejection/resubmission, manual cancellation, hourly expiry for awaiting-proof/rejected payments, and per-payment distributed locking. Submitted proofs remain for manual review.
+    - **Notifications & Refunds:** Added customer/studio status email templates and subscribers. UPI refunds are recorded in Medusa only after the business sends the refund manually; the refund UTR is recorded in the note.
+    - **Documentation & Tests:** See `docs/upi-manual.md`. Coverage includes backend workflow/provider/API/admin/subscriber/config tests and storefront guard/checkout/panel tests; `apps/backend/src/scripts/test-upi-flow.ts` runs the fixture-backed lifecycle smoke test without database writes.
 
 ---
 
@@ -509,13 +514,17 @@ Status legend: `BLOCKER` = must fix before taking real money. `SHOULD` = fix bef
 
 ### 6.2 BLOCKERS - fix before any real customer pays
 
-**B1. Manual payment can bypass Razorpay. (RESOLVED)**
-Resolved across storefront UI, Server Actions, backend configuration scripts, and documentation:
-- Storefront UI: `isSupportedProvider` and `providerLabel` in `CheckoutFlow.tsx` allow `pp_system_default` only when `process.env.NODE_ENV !== "production"`. Razorpay is always accepted. In production, manual payment labels and generic place order buttons are omitted.
-- Server Actions & Cart: `apps/storefront/src/lib/payment-guard.ts` provides `assertAllowedProvider` and `isRazorpayProvider`. Server actions (`startPayment`, `initiatePaymentSession`, `placeOrder`) reject non-Razorpay providers in production before calling Medusa.
-- Backend Safety Script: `apps/backend/src/scripts/check-production-config.ts` (runnable via `npm run check:prod-config`) inspects all regions via Medusa Query Graph API, asserting currency is `inr` and payment provider is `pp_razorpay_razorpay` only, exiting code 1 on violation.
+**B1. Uncontrolled manual payment can bypass Razorpay. (RESOLVED; guarded UPI exception)**
+The production provider allowlist is `pp_razorpay_razorpay` and, only when
+`ENABLE_UPI_MANUAL=true`, `pp_upimanual_upimanual`. The UPI provider authorizes
+orders without capturing funds; an administrator must verify the transfer
+before capture. The generic `pp_system_default` provider and every other
+provider remain disallowed.
+- Storefront UI: `isSupportedProvider` and `providerLabel` in `CheckoutFlow.tsx` allow `pp_system_default` only when `process.env.NODE_ENV !== "production"` and expose UPI only when `NEXT_PUBLIC_ENABLE_UPI_MANUAL=true`. Razorpay remains the default.
+- Server Actions & Cart: `apps/storefront/src/lib/payment-guard.ts` provides `assertAllowedProvider` and `isRazorpayProvider`. Server actions (`startPayment`, `initiatePaymentSession`, `placeOrder`) accept Razorpay, or UPI only when `NEXT_PUBLIC_ENABLE_UPI_MANUAL=true`, in production.
+- Backend Safety Script: `apps/backend/src/scripts/check-production-config.ts` (runnable via `npm run check:prod-config`) inspects all regions via Medusa Query Graph API, asserting currency is `inr` and only the flag-enabled provider set is configured, exiting code 1 on violation.
 - Seed Guard: `initial-data-seed.ts` is guarded behind `SEED_DEMO_DATA=true`.
-- Documentation: Added Section 9 to `docs/razorpay.md`. Verified with 25 passing unit tests.
+- Documentation: Section 9 of `docs/razorpay.md` describes the flag-gated UPI exception. See `docs/upi-manual.md` for operations and refund instructions.
 
 **B2. Revalidate endpoint can be called without a secret. (RESOLVED)**
 Resolved across storefront route, backend subscribers, and configuration guards:
@@ -680,7 +689,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] Fail-closed Razorpay credentials in `medusa-config.ts`
 - [x] **CP0 — Clean build baseline:** single lockfile, all imports declared, dead starter code deleted, `lint`/`typecheck`/`test` scripts wired, build/lint/test pass with zero ignored errors (section 5 item 25)
 - [x] **CP3 — Transactional emails:** Notification module + custom Resend provider, order placed and fulfilled emails, trade and commission status emails, hardened production logging (section 5 item 24)
-- [x] **B1 — Remove manual payment path:** Storefront UI + server-side action guards, check:prod-config backend validation script, SEED_DEMO_DATA guard, 25 unit tests passed (section 5 item 26)
+- [x] **B1 — Restrict generic manual payment bypass:** Storefront and server-side guards, check:prod-config, and seed guard; production allows Razorpay and flag-gated manual UPI only, never `pp_system_default` (section 5 item 26)
 - [x] **B2 — Hardening ISR revalidate endpoint:** constant-time verification, header-preferred POST-only route, Medusa production startup guard, backend subscriber header auth, 9 unit tests passed (section 5 item 27)
 - [x] **B3 — Trade application data leak:** require customer authentication on GET, query-level case-insensitive filtering ($ilike) without in-memory limits, safe field projection, deduplication on POST, 15 backend unit tests + 4 storefront unit tests passed (section 5 item 28)
 - [x] **B8a — Razorpay refund hardening:** throw on missing payment ID, validate amount against captured payment, ensure idempotency via receipt/notes, safe logging without secrets, 8 unit tests passed (section 5 item 29)
@@ -688,6 +697,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **B6 — Contact, inquiry & newsletter that never lose data:** Custom Medusa inquiry module, NewsletterSubscriber double opt-in, salted IP hashing, Resend studio & confirmation emails, Turnstile bot protection, honeypots, pluggable Upstash rate limiter with fail-closed production guard, Next.js /api/inquiry honest 502 proxy, Admin Inquiries & Newsletter dashboard, 16 backend + 14 storefront tests passed (section 5 item 31)
 - [x] **B10 — Commission payment path:** Accepted commissions convert to draft orders with order_payment_collection, Razorpay checkout modal from /account and dedicated /pay page, completeCommissionPayment workflow, auto-recovery via webhook reconciliation, 13 backend + 5 storefront tests passed (section 5 item 32)
 - [x] **Production-Grade Saved (Wishlist) feature:** Custom Medusa wishlist module, composite unique index, migration, authenticated Store API (GET, POST, DELETE, merge), hybrid guest/logged-in store, optimistic UI with rollback, SavedToast, SavedAuthSync, 200 items cap, stale item pruning, docs/saved-feature.md, 13 backend + 8 storefront unit tests passed (section 5 item 33)
+- [x] **Direct UPI with manual verification:** Flag-gated `pp_upimanual_upimanual`, UPI payment module/migration, checkout and proof flow, Admin verification/rejection/cancellation, hourly expiry, notifications, refund guidance, production allowlist, docs, fixture flow script, and tests (section 5 item 34)
 
 ### CP0 - Clean baseline (COMPLETE — exit test passed)
 - [x] Remove `apps/storefront/package-lock.json`; keep the single root lockfile
@@ -745,7 +755,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Production env var checklist and secret rotation record
 
 ### CP5 - Legal, tax, content
-- [ ] Verify the India/INR region in Admin: only Razorpay enabled, Europe/EUR demo region deleted, INR is the only store currency
+- [ ] Verify the India/INR region in Admin: Razorpay enabled and UPI manual enabled only when configured; Europe/EUR demo region deleted; INR is the only store currency
 - [ ] Configure GST/tax rates and tax-inclusive pricing with your CA; check an invoice
 - [ ] Rewrite privacy, terms, shipping and returns; add commission terms and authenticity/COA terms
 - [ ] Replace `hello@example.com` and fix the brand name in privacy copy

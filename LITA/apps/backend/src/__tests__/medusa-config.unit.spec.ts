@@ -27,6 +27,102 @@ describe("medusa-config module and environment configuration", () => {
     process.env = { ...originalEnv }
   })
 
+  describe("manual UPI payment module feature flag", () => {
+    test.each([undefined, "false"])(
+      "does not register the UPI payment module unless explicitly enabled (%s)",
+      (enabled) => {
+        if (enabled === undefined) {
+          delete process.env.ENABLE_UPI_MANUAL
+        } else {
+          process.env.ENABLE_UPI_MANUAL = enabled
+        }
+
+        const config = require("../../medusa-config")
+        const upiModule = Object.values(config.modules ?? {}).find(
+          (module) =>
+            (module as { resolve?: string }).resolve === "./src/modules/upi-payment"
+        )
+
+        expect(upiModule).toBeUndefined()
+      }
+    )
+
+    test("registers the UPI payment module when explicitly enabled", () => {
+      process.env.ENABLE_UPI_MANUAL = "true"
+      process.env.UPI_VPA = "payments@example"
+      process.env.UPI_PAYEE_NAME = "LITA"
+
+      const config = require("../../medusa-config")
+      const upiModule = Object.values(config.modules ?? {}).find(
+        (module) =>
+          (module as { resolve?: string }).resolve === "./src/modules/upi-payment"
+      )
+
+      expect(upiModule).toBeDefined()
+    })
+
+    test("registers the manual UPI provider with configured options only when enabled", () => {
+      process.env.ENABLE_UPI_MANUAL = "true"
+      process.env.UPI_VPA = "payments@example"
+      process.env.UPI_PAYEE_NAME = "LITA"
+      process.env.UPI_ORDER_EXPIRY_HOURS = "36"
+
+      const config = require("../../medusa-config")
+      const paymentModule = config.modules?.payment
+      const provider = paymentModule?.options?.providers?.find(
+        (entry: { id?: string }) => entry.id === "upimanual"
+      )
+
+      expect(provider).toMatchObject({
+        resolve: "./src/modules/upi-manual",
+        id: "upimanual",
+        options: {
+          vpa: "payments@example",
+          payee_name: "LITA",
+          expiry_hours: 36,
+        },
+      })
+    })
+
+    test("uses a 48-hour expiry by default", () => {
+      process.env.ENABLE_UPI_MANUAL = "true"
+      process.env.UPI_VPA = "payments@example"
+      process.env.UPI_PAYEE_NAME = "LITA"
+      delete process.env.UPI_ORDER_EXPIRY_HOURS
+
+      const config = require("../../medusa-config")
+      const provider = config.modules?.payment?.options?.providers?.find(
+        (entry: { id?: string }) => entry.id === "upimanual"
+      )
+
+      expect(provider.options.expiry_hours).toBe(48)
+    })
+
+    test("fails startup with a clear error if required UPI config is missing", () => {
+      process.env.ENABLE_UPI_MANUAL = "true"
+      delete process.env.UPI_VPA
+      delete process.env.UPI_PAYEE_NAME
+
+      expect(() => require("../../medusa-config")).toThrow(
+        "[startup] ENABLE_UPI_MANUAL=true requires both UPI_VPA and UPI_PAYEE_NAME."
+      )
+    })
+
+    it.each(["5", "169", "6.5", "invalid"])(
+      "rejects an expiry outside the allowed range (%s)",
+      (expiryHours) => {
+        process.env.ENABLE_UPI_MANUAL = "true"
+        process.env.UPI_VPA = "payments@example"
+        process.env.UPI_PAYEE_NAME = "LITA"
+        process.env.UPI_ORDER_EXPIRY_HOURS = expiryHours
+
+        expect(() => require("../../medusa-config")).toThrow(
+          "UPI_ORDER_EXPIRY_HOURS must be an integer between 6 and 168."
+        )
+      }
+    )
+  })
+
   describe("Redis infrastructure configuration (B4)", () => {
     test("in development without REDIS_URL, keeps in-memory defaults and redisUrl is undefined", () => {
       delete process.env.NODE_ENV

@@ -108,6 +108,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       `img-src 'self' data: blob: http://localhost:* https://*.s3.*.amazonaws.com https://*.s3.amazonaws.com https://res.cloudinary.com https://*.medusajs.com https://*.r2.dev ${R2_HOSTNAME ? `https://${R2_HOSTNAME}` : ""}`.trim(),
+      // When enforcing this policy, add the configured R2 host to connect-src for browser PUT uploads.
       `connect-src 'self' http://localhost:9000 http://127.0.0.1:9000 ${process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || ""}`.trim(),
       "frame-ancestors 'self'",
       "base-uri 'self'",

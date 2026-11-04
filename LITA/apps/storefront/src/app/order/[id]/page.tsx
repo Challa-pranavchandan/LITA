@@ -5,14 +5,27 @@ import { notFound } from "next/navigation";
 import { getOrder } from "@/lib/data/cart";
 import { OrderTotals } from "@/components/CartLines";
 import { formatMoney } from "@/lib/format";
+import { getUpiPayment } from "@/lib/data/upi";
+import { UpiPayPanel } from "@/components/upi/UpiPayPanel";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Order placed", robots: { index: false } };
 
-export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ pay?: string }>;
+}) {
   const { id } = await params;
   const order = await getOrder(id);
   if (!order) notFound();
+  const [{ pay }, upiResult] = await Promise.all([
+    searchParams,
+    getUpiPayment(id),
+  ]);
+  const showUpiPanel = pay === "upi" || Boolean(upiResult.payment);
   const a = order.shipping_address;
 
   return (
@@ -21,6 +34,16 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       <p className="mt-2 text-graphite">
         Order number {order.display_id ? `#${order.display_id}` : order.id}. A confirmation will be sent to {order.email}.
       </p>
+
+      {showUpiPanel && upiResult.payment && (
+        <UpiPayPanel orderId={id} initialPayment={upiResult.payment} />
+      )}
+      {pay === "upi" && !upiResult.payment && (
+        <p role="alert" className="mt-8 border border-dust bg-wall p-4 text-sm">
+          {upiResult.error ??
+            "UPI payment instructions could not be found. Please contact the studio for help."}
+        </p>
+      )}
 
       <ul className="mt-10 divide-y divide-mist border-y border-mist">
         {(order.items ?? []).map((item) => (

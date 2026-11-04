@@ -16,7 +16,10 @@ import {
   updateCustomerAddress as saveCustomerAddress,
 } from "@/lib/data/customer";
 import { isRazorpay } from "@/lib/constants";
-import { isSupportedProvider } from "@/lib/payment-guard";
+import {
+  isSupportedProvider,
+  isUpiManualProvider,
+} from "@/lib/payment-guard";
 import RazorpayPaymentButton from "@/modules/checkout/components/payment-button/razorpay-payment-button";
 import {
   AddressFormModal,
@@ -33,11 +36,14 @@ import {
 type Step = "address" | "shipping" | "payment";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production"
+const ENABLE_UPI_MANUAL =
+  process.env.NEXT_PUBLIC_ENABLE_UPI_MANUAL === "true"
 const ADDRESS_DRAFT_KEY = "lita-checkout-address-draft";
 
 type CheckoutAddress = HttpTypes.StoreCustomerAddress;
 
 function providerLabel(id: string) {
+  if (isUpiManualProvider(id)) return "Pay by UPI (QR / UPI ID)"
   if (isRazorpay(id)) return "UPI / Cards / Netbanking (Razorpay)"
   if (id === "pp_system_default" && !IS_PRODUCTION) {
     return "Manual Payment (Pay Offline / Test)"
@@ -233,8 +239,16 @@ export function CheckoutFlow({
 
   const currency = cart.currency_code;
   const selectedShipping = cart.shipping_methods?.[0]?.shipping_option_id;
-  const usable = providers.filter((p) => isSupportedProvider(p.id));
-  const [providerId, setProviderId] = useState(usable[0]?.id ?? "");
+  const usable = providers.filter(
+    (provider) =>
+      isSupportedProvider(provider.id) &&
+      (!isUpiManualProvider(provider.id) || ENABLE_UPI_MANUAL)
+  );
+  const [providerId, setProviderId] = useState(
+    usable.find((provider) => isRazorpay(provider.id))?.id ??
+      usable[0]?.id ??
+      ""
+  );
 
   function submitAddress(e: React.FormEvent) {
     e.preventDefault();
@@ -431,9 +445,21 @@ export function CheckoutFlow({
   function submitOrder() {
     setError(null);
     startTransition(async () => {
-      const started = await startPayment(providerId);
+      let started;
+      try {
+        started = await startPayment(providerId);
+      } catch (paymentError) {
+        setError(
+          paymentError instanceof Error
+            ? paymentError.message
+            : "Could not start payment. Please refresh checkout and try again."
+        );
+        return;
+      }
       if (!started.ok) return setError(started.error);
-      const res = await placeOrder();
+      const res = await placeOrder({
+        upiManual: isUpiManualProvider(providerId),
+      });
       if (res && !res.ok) setError(res.error);
     });
   }
@@ -672,7 +698,15 @@ export function CheckoutFlow({
               {usable.map((p) => (
                 <label key={p.id} className={`flex cursor-pointer items-center gap-3 border p-4 ${providerId === p.id ? "border-ink bg-wall" : "border-dust"}`}>
                   <input type="radio" name="provider" checked={providerId === p.id} onChange={() => setProviderId(p.id)} className="accent-[#2A3590]" />
-                  <span>{providerLabel(p.id)}</span>
+                  <span className="space-y-1">
+                    <span className="block">{providerLabel(p.id)}</span>
+                    {isUpiManualProvider(p.id) && ENABLE_UPI_MANUAL && (
+                      <span className="block text-sm text-graphite">
+                        Pay from any UPI app after placing your order. Your order
+                        is held for 48 hours while we confirm your payment.
+                      </span>
+                    )}
+                  </span>
                 </label>
               ))}
             </fieldset>
@@ -684,6 +718,15 @@ export function CheckoutFlow({
                 <div className="pt-2">
                   <RazorpayPaymentButton cart={cart} notReady={pending || !providerId} />
                 </div>
+              ) : isUpiManualProvider(providerId) && ENABLE_UPI_MANUAL ? (
+                <button
+                  type="button"
+                  onClick={submitOrder}
+                  disabled={pending || !providerId}
+                  className="btn-solid w-full sm:w-auto"
+                >
+                  {pending ? "Placing order…" : "Place order and pay by UPI"}
+                </button>
               ) : !IS_PRODUCTION ? (
                 <button type="button" onClick={submitOrder} disabled={pending || !providerId} className="btn-solid w-full sm:w-auto">
                   {pending ? "Placing order…" : `Place order · ${formatMoney(cart.total, currency)}`}

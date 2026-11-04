@@ -1,4 +1,5 @@
 import { loadEnv, defineConfig, MedusaError } from "@medusajs/framework/utils"
+import { getUpiOrderExpiryHours } from "./src/lib/upi-config"
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd())
 
@@ -88,6 +89,15 @@ const allowDevPaymentPlaceholders =
 
 const workerMode = (process.env.MEDUSA_WORKER_MODE as "shared" | "server" | "worker") || "shared"
 const disableMedusaAdmin = process.env.DISABLE_MEDUSA_ADMIN === "true"
+const enableUpiManual = process.env.ENABLE_UPI_MANUAL === "true"
+const upiExpiryHours = enableUpiManual ? getUpiOrderExpiryHours() : 48
+
+if (enableUpiManual && (!process.env.UPI_VPA || !process.env.UPI_PAYEE_NAME)) {
+  throw new MedusaError(
+    MedusaError.Types.INVALID_ARGUMENT,
+    "[startup] ENABLE_UPI_MANUAL=true requires both UPI_VPA and UPI_PAYEE_NAME."
+  )
+}
 
 module.exports = defineConfig({
   admin: {
@@ -179,6 +189,13 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/wishlist",
     },
+    ...(enableUpiManual
+      ? [
+          {
+            resolve: "./src/modules/upi-payment",
+          },
+        ]
+      : []),
     {
       resolve: "@medusajs/medusa/payment",
       options: {
@@ -198,6 +215,19 @@ module.exports = defineConfig({
                 (allowDevPaymentPlaceholders ? "dummy_webhook_secret" : ""),
             },
           },
+          ...(enableUpiManual
+            ? [
+                  {
+                    resolve: "./src/modules/upi-manual",
+                    id: "upimanual",
+                    options: {
+                      vpa: process.env.UPI_VPA,
+                      payee_name: process.env.UPI_PAYEE_NAME,
+                      expiry_hours: upiExpiryHours,
+                    },
+                  },
+                ]
+            : []),
         ],
       },
     },

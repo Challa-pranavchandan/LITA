@@ -1,4 +1,11 @@
-import { authenticate, configureStoreSearch, defineMiddlewares, validateAndTransformBody } from "@medusajs/framework/http"
+import {
+  authenticate,
+  configureStoreSearch,
+  defineMiddlewares,
+  validateAndTransformBody,
+  type MedusaRequest,
+  type MedusaResponse,
+} from "@medusajs/framework/http"
 import { z } from "@medusajs/framework/zod"
 import multer from "multer"
 import { createRateLimitMiddleware } from "./middlewares/rate-limit"
@@ -94,12 +101,77 @@ export const UnsubscribeNewsletterSchema = z.object({
   website: z.string().optional().nullable(),
 })
 
+export const UpipaymentsUploadUrlSchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+  contentType: z.string().trim().min(1).max(100),
+  size: z.number().int().positive().max(5 * 1024 * 1024),
+})
+
+export const UpipaymentsProofSchema = z.object({
+  utr: z.string().trim().max(64).optional(),
+  screenshot_key: z.string().trim().max(512).optional(),
+  payer_vpa: z.string().trim().max(100).optional(),
+  turnstile_token: z.string().trim().max(2048).optional(),
+  website: z.string().trim().max(256).optional(),
+})
+
+export const VerifyUpiPaymentSchema = z.object({
+  amount_confirmed: z.literal(true),
+})
+
+export const RejectUpiPaymentSchema = z.object({
+  reason: z.string().trim().min(3).max(300),
+})
+
 export const UpdateInquirySchema = z.object({
   status: z.enum(["new", "replied", "archived"]),
 })
 
+const upiFeatureFlagGate = (
+  _req: MedusaRequest,
+  res: MedusaResponse,
+  next: (error?: unknown) => void
+) => {
+  if (process.env.ENABLE_UPI_MANUAL !== "true") {
+    return res.status(404).json({ message: "Not found." })
+  }
+  return next()
+}
+
 export default defineMiddlewares({
   routes: [
+    {
+      matcher: "/store/upi-payments/*",
+      middlewares: [
+        upiFeatureFlagGate,
+        authenticate("customer", ["bearer", "session"], {
+          allowUnauthenticated: true,
+        }),
+      ],
+    },
+    {
+      matcher: "/store/upi-payments/by-order/:order_id",
+      method: "GET",
+      middlewares: [
+        createRateLimitMiddleware("upi_lookup", 30, 15 * 60 * 1000),
+      ],
+    },
+    {
+      matcher: "/store/upi-payments/:reference/upload-url",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("upi_upload", 10, 15 * 60 * 1000),
+        validateAndTransformBody(UpipaymentsUploadUrlSchema),
+      ],
+    },
+    {
+      matcher: "/store/upi-payments/:reference/proof",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("upi_proof", 5, 15 * 60 * 1000),
+        validateAndTransformBody(UpipaymentsProofSchema),
+      ],
+    },
     {
       method: ["POST"],
       matcher: "/store/feedback",
@@ -123,6 +195,20 @@ export default defineMiddlewares({
       matcher: "/admin/journal",
       method: "POST",
       middlewares: [validateAndTransformBody(PostSchema)],
+    },
+    {
+      matcher: "/admin/upi-payments/:id/verify",
+      method: "POST",
+      middlewares: [validateAndTransformBody(VerifyUpiPaymentSchema)],
+    },
+    {
+      matcher: "/admin/upi-payments/:id/reject",
+      method: "POST",
+      middlewares: [validateAndTransformBody(RejectUpiPaymentSchema)],
+    },
+    {
+      matcher: "/admin/upi-payments/:id/cancel",
+      method: "POST",
     },
     {
       matcher: "/admin/journal/:id",

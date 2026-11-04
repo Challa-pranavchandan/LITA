@@ -1,6 +1,11 @@
 export const RAZORPAY_PREFIX = "pp_razorpay"
 export const RAZORPAY_PROVIDER_ID = "pp_razorpay_razorpay"
 export const MANUAL_PROVIDER_ID = "pp_system_default"
+export const UPI_MANUAL_PROVIDER_ID = "pp_upimanual_upimanual"
+
+export function isUpiManualProvider(id?: string | null): boolean {
+  return id === UPI_MANUAL_PROVIDER_ID
+}
 
 /**
  * Checks if a given provider identifier is a Razorpay payment provider.
@@ -17,9 +22,11 @@ export function isRazorpayProvider(id?: string | null): boolean {
  */
 export function isSupportedProvider(
   id: string,
-  nodeEnv: string = process.env.NODE_ENV || "development"
+  nodeEnv: string = process.env.NODE_ENV || "development",
+  enableUpiManual = process.env.NEXT_PUBLIC_ENABLE_UPI_MANUAL === "true"
 ): boolean {
   if (isRazorpayProvider(id)) return true
+  if (isUpiManualProvider(id)) return enableUpiManual
   if (id === MANUAL_PROVIDER_ID && nodeEnv !== "production") return true
   return false
 }
@@ -31,8 +38,13 @@ export function isSupportedProvider(
  */
 export function assertAllowedProvider(
   providerId: string,
-  nodeEnv: string = process.env.NODE_ENV || "development"
+  nodeEnv: string = process.env.NODE_ENV || "development",
+  enableUpiManual = process.env.NEXT_PUBLIC_ENABLE_UPI_MANUAL === "true"
 ): void {
+  if (isUpiManualProvider(providerId)) {
+    if (enableUpiManual) return
+    throw new Error("UPI manual payment is not enabled.")
+  }
   if (nodeEnv !== "production") return
   if (!isRazorpayProvider(providerId)) {
     throw new Error(
