@@ -1,7 +1,7 @@
 # LITA — Project Status & Context Guide for Claude
 
-> **Last audited:** 30 Oct 2026. Updated with CP0 (clean baseline) and CP3 (notification emails) completion.
-> Sections 1-5 are the preserved history. **Section 6 onward is rewritten** with the production-readiness audit, checkpoints and the master TODO list.
+> **Last updated:** 5 Nov 2026. Reconciled with the latest commission lifecycle and order-tracking commits, plus the current commission installment work in the local working tree.
+> Sections 1-5 retain the project history and completed feature notes. **Section 6 onward** tracks current production readiness, checkpoints and the master TODO list.
 
 > **Instructions for Claude / AI Assistant:**
 > This document describes the exact architecture, current status, recent fixes, and open roadmap for the **LITA** (Livin In The Art) ecommerce platform. Use this file as context to understand the repository structure, conventions, and to generate ready-to-implement code and prompts without repeating previously resolved issues.
@@ -212,8 +212,8 @@
     - **Task 4 — Complete Password Reset Flow with Resend (COMPLETED):**
       - Backend: Created subscriber `apps/backend/src/subscribers/password-reset.ts` listening to `auth.password_reset`, generating branded editorial HTML emails, and dispatching via Resend REST API (with automatic fallback to console link logging in local dev).
       - Storefront: Created Server Actions `requestPasswordReset(email)` and `resetPassword(token, newPassword)` in `apps/storefront/src/lib/data/password-reset.ts`. Implemented `/account/forgot-password` and `/account/reset-password` pages and added "Forgot password?" link to `AuthForms.tsx`.
-    - **Task 5 — Rate Limiting (POSTPONED / PARTIALLY IMPLEMENTED):**
-      Evaluated application-level vs infrastructure-level rate limiting. Distributed rate limiting across the storefront, inquiries, and backend APIs is postponed to the infrastructure / edge deployment phase (e.g. Cloudflare WAF rate limiting rules or Upstash Redis distributed sliding window in Next.js middleware). However, an in-process in-memory sliding window limiter was built in `apps/storefront/src/lib/security/rate-limit.ts` (see Item 17 below) which guards the `login` and `register` server actions only.
+    - **Task 5 — Rate Limiting (PARTIALLY COMPLETED; B6):**
+      The original in-memory limiter only covered login and registration. B6 later added a pluggable Upstash-backed limiter with fail-closed production configuration for public forms and related endpoints, plus Turnstile and honeypots on supported forms. Cloudflare edge/WAF rules and deployment-level verification remain open; see B6 and S2.
     - **Task 6 — Server-Side Password Policy (COMPLETED):**
       Enforced server-side 8-character minimum validation directly in `apps/storefront/src/lib/data/customer.ts` (`register()` action) and `apps/storefront/src/lib/data/password-reset.ts` (`resetPassword()` action), preventing client-side bypass.
     - **Task 7 — Robust Duplicate Registration Error Handling (COMPLETED):**
@@ -280,7 +280,7 @@
       - `/verify-email`: Branded notice screen handling pending verification, token success, and expired link recovery.
       - `/auth/callback`: Server-side code exchange route handler for email confirmation and magic links.
     - **Modular Form Components:** Built bespoke fine-art styled UI components under `apps/storefront/src/components/auth/`: `LoginForm`, `RegisterForm`, `ForgotPasswordForm`, `ResetPasswordForm`, `VerifyEmailNotice`, and `AccountDashboard`.
-    - **Security & Rate Limiting:** Built in-memory sliding window rate limiter in `apps/storefront/src/lib/security/rate-limit.ts` (15-minute window, 5 attempts max) guarding the `login` and `register` server actions in `apps/storefront/src/lib/data/customer.ts`. Note: this in-memory limiter guards only `login` and `register`; it does not protect other endpoints (such as `/forgot-password`, `/reset-password`, contact forms, trade applications, inquiries, or backend APIs), and edge/distributed rate limiting remains postponed.
+    - **Security & Rate Limiting:** The initial implementation used an in-memory sliding window limiter in `apps/storefront/src/lib/security/rate-limit.ts` (15-minute window, 5 attempts max) for `login` and `register`. This was extended by B6 with pluggable Upstash-backed limits for public forms and related flows; consult the current limiter configuration and S2 rather than treating this historical implementation as the complete protection.
     - **Schema Validation & Password Rules:** Implemented strict Zod schemas in `apps/storefront/src/lib/validation/auth.ts` enforcing 8+ character passwords with uppercase, lowercase, and numeric requirements.
     - **Supabase Database Schema & RLS:** Authored `supabase/migrations/01_profiles_and_rls.sql` establishing `public.profiles` table with row-level security (RLS) policies and automatic trigger on `auth.users` insertion.
     - **Guest Cart Preservation & Checkout Sync:** Wired customer authentication directly into cart actions (`transferCart` in `customer.ts`), preserving guest cart items when customers sign in and auto-prefilling customer details in checkout.
@@ -439,7 +439,8 @@
       - Created dedicated landing pages: `/newsletter/confirmed`, `/newsletter/unsubscribed`, and confirmation proxy handler `/newsletter/confirm/route.ts`.
     - **Automated Tests:** 16 backend unit tests passing in `apps/backend/src/__tests__/inquiries.unit.spec.ts` and 14 storefront unit tests passing in `apps/storefront/src/__tests__/inquiry-forms.test.js`.
 
-32. **B10 — Commission Payment Path with Razorpay Modal & Webhook Reconciliation (RESOLVED — CP2):**
+32. **B10 — Initial Commission Payment Path with Razorpay Modal & Webhook Reconciliation (IMPLEMENTED; installment extension in item 37):**
+    - This item records the original single-payment implementation. The current two-installment lifecycle and its verification state are tracked in item 37.
     - **Architecture & Business Rules:** Implemented Option A (Standard Razorpay Checkout Modal). Pricing is strictly all-inclusive (artwork, museum packaging, insured domestic shipping, GST). Lifecycle status flow: `new` -> `in_discussion` -> `quoted` -> `accepted` -> `awaiting_payment` -> `paid` (also gracefully supporting existing `converted` records).
     - **Database Migration:** Generated and applied migration `Migration20261031054013.ts` to Supabase PostgreSQL: added `awaiting_payment` and `paid` to `commission.status` enum; added nullable `paid_at` (`timestamptz`) and `payment_reference` (`text`).
     - **Draft Order & Payment Collection:** Updated `convert-commission-to-order.ts` to invoke `createOrderPaymentCollectionWorkflow` binding an `order_payment_collection` with the exact server-side `quoted_price`, transition commission to `awaiting_payment`, and rollback payment collection if conversion fails.
@@ -484,14 +485,35 @@
     - **Notifications & Refunds:** Added customer/studio status email templates and subscribers. UPI refunds are recorded in Medusa only after the business sends the refund manually; the refund UTR is recorded in the note.
     - **Documentation & Tests:** See `docs/upi-manual.md`. Coverage includes backend workflow/provider/API/admin/subscriber/config tests and storefront guard/checkout/panel tests; `apps/backend/src/scripts/test-upi-flow.ts` runs the fixture-backed lifecycle smoke test without database writes.
 
+35. **Commission Lifecycle Hardening (COMMITTED — 5 Nov 2026):**
+    - **Valid state transitions:** Centralized commission transition rules and guards, including safe conversion and payment-completion checks; status changes emit a consistent event for notification subscribers.
+    - **API and access controls:** Tightened customer ownership checks and request validation across commission creation, detail, messages, acceptance, payment, and upload routes. Admin lifecycle actions validate inputs and return explicit conflict/validation responses.
+    - **Private commission imagery:** Hardened R2 upload/download handling and verification so customer images remain private and associated with the owning commission.
+    - **Admin and notification experience:** Added customer discussion/status support in Admin and updated commission email handling for the expanded lifecycle.
+    - **Reference:** Commit `eae9649` (`fix: harden commission lifecycle`). The separate 50% deposit/final-balance extension is described in item 37.
+
+36. **Live Order Status and Shipment Tracking (COMMITTED — 5 Nov 2026):**
+    - **Backend tracking endpoint:** Added `GET /store/orders/:order_id/tracking`, returning fulfillment tracking numbers and URLs collected from fulfillment tracking fields and labels.
+    - **Storefront status panel:** The order confirmation page now renders live order/payment/fulfillment status and tracking links. Status labels are normalized for customers, and order/tracking information refreshes every 15 seconds while the page is visible.
+    - **Account access:** Added order status visibility to the customer account area.
+    - **Security follow-up:** Guest order lookup and the new tracking endpoint still require explicit access-control/authorization testing; see S11 before launch.
+    - **Reference:** Commit `377bf79` (`feat: implement order tracking page with live status updates and shipment tracking`).
+
+37. **Commission 50% Deposit and Final-Balance Payments (IN PROGRESS — LOCAL WORKING TREE):**
+    - **Lifecycle:** The first Razorpay payment is a 50% deposit. Successful capture places the commission order and advances it to `in_production`; when the work is ready to pack, an admin requests the remaining balance, moving it to `awaiting_final_payment`. Capturing that balance advances it to `paid`.
+    - **Amount and session safety:** The server computes the deposit as `ceil(total / 2)` and the balance as the exact remainder, so odd whole-rupee quotes still sum to the quoted total. Payment collections and Razorpay sessions carry the installment identity, and payment completion checks the requested installment, expected amount, commission state, and final-payment request timestamp.
+    - **Admin, email, and storefront:** Added a “Request Final 50%” admin action, status email support, and customer-facing deposit/balance labels and payment confirmation states.
+    - **Persistence:** Added `deposit_paid_at`, `deposit_payment_reference`, `final_payment_requested_at`, `final_paid_at`, and `final_payment_reference`, with migration `Migration20261105180000.ts`. Application of this migration to a database has not been confirmed.
+    - **Verification:** Focused tests run in this workspace: 4 backend suites / 91 tests and the storefront commission-payment suite / 5 tests passed. These changes are still uncommitted; run the Razorpay test-mode lifecycle and webhook recovery matrix before treating the feature as release-ready.
+
 ---
 
 
-## 6. Production Readiness Audit (30 Oct 2026)
+## 6. Production Readiness Audit (baseline 30 Oct 2026; status refreshed 5 Nov 2026)
 
 ### 6.1 Verdict
 
-Feature-wise LITA is close to a launchable v1 (catalog, checkout with Razorpay, accounts, commissions, trade, journal, gallery, admin tools). **It is not production-ready yet.** The gaps are mostly in four places: (1) a few security/money-safety holes, (2) missing customer emails, (3) infrastructure that only works on a single dev machine (in-memory events/locks, no CI/CD, no monitoring), (4) legal/tax content for an Indian store.
+Feature-wise LITA has a broad v1 feature set (catalog, checkout, accounts, commissions, trade, journal, gallery, admin tools, and order tracking). **It is not production-ready yet.** Core payment and commission safeguards have improved, and Redis-backed infrastructure is configured, but live payment verification, deployment/operations, legal/tax review, and production access checks remain open.
 
 **Scope decision (confirmed by owner):** India only, INR only, one default region (`in`). Anything built for multiple countries, currencies or languages is dead weight and should be removed, not maintained (see S15).
 
@@ -500,12 +522,12 @@ Status legend: `BLOCKER` = must fix before taking real money. `SHOULD` = fix bef
 | Area | Status | Summary |
 | :--- | :--- | :--- |
 | Catalog, cart, browsing, ISR | DONE (needs hardening) | Works; dead starter code deleted (CP0) |
-| Razorpay payments | BLOCKER | Strong core; manual-payment path, refund no-op, go-live steps and CSP still open |
-| Auth & accounts | SHOULD | Works; rate limiting is in-memory only; magic link not built |
-| Commissions / Trade / Feedback | DONE (B3 & B10 resolved) | Trade lookup hardened (B3); commission payment path live with Razorpay checkout & webhook recovery (B10) |
-| Email & notifications | DONE (CP3) | Notification module + Resend provider live; order, trade, commission emails sent; studio inbox, newsletter and domain SPF/DKIM pending |
+| Razorpay payments | BLOCKER | Provider allowlisting and refund hardening are implemented; test-mode lifecycle/replay checks, live activation and CSP enforcement remain |
+| Auth & accounts | SHOULD | Works; distributed limiting exists for supported flows but deployment coverage needs verification; magic link not built |
+| Commissions / Trade / Feedback | IN PROGRESS | Trade lookup and commission lifecycle hardening are implemented; the 50% deposit/final-balance flow has focused unit-test coverage but needs migration and end-to-end Razorpay verification |
+| Email & notifications | MOSTLY DONE (CP3/B6) | Order, trade, commission, inquiry and newsletter flows exist; cancellation/refund email coverage and sending-domain SPF/DKIM/DMARC remain |
 | Security & edge | PARTIALLY DONE | Revalidate auth hardened (B2), distributed rate limiting + Turnstile live (B6); CSP enforcement & feedback upload guard still open |
-| Infrastructure & ops | BLOCKER | No Redis modules, no Docker/CI, no monitoring, no backup plan, wrong DB region |
+| Infrastructure & ops | BLOCKER | Redis modules and worker split are implemented (B4); deployed staging, Docker/platform config, CI, monitoring, backups and database region work remain |
 | Build quality & tests | DONE (CP0) | Single lockfile, all imports declared, build/lint/test pass with zero ignored errors |
 | Legal, tax, content | BLOCKER | Privacy page names another brand, no GST setup, thin policies |
 | SEO & performance | SHOULD | No sitemap/robots wiring, 12 MB unoptimized public images, optimization disabled |
@@ -602,8 +624,8 @@ Still open:
 - The India region lives in your database (created in Admin), so I could not see its tax setup. The repo only seeds a Europe/EUR region with the generic `tp_system` tax provider. Check in Admin that the India region has the right tax region and rates, and decide with your CA: tax-inclusive pricing, HSN/GST rates, whether you need state-wise CGST/SGST vs IGST, and the invoice format.
 - India-specific items usually expected for an online store: seller and grievance officer details, consent wording for personal data, GST invoice on every order. Confirm the exact list with a lawyer.
 
-**B10. Commission payment path (RESOLVED — CP2).**
-Accepted commissions become draft orders linked to an `order_payment_collection` via `convert-commission-to-order.ts` and are marked `awaiting_payment`. Customers securely pay via Razorpay modal directly from `/account` or `/account/commissions/[id]/pay`. `complete-commission-payment.ts` captures the payment, converts draft orders to placed orders, stamps `paid_at`, and triggers confirmation emails. Pay-then-close-tab events are recovered via `reconcile-razorpay-order.ts`.
+**B10. Commission payment path (INITIAL FLOW IMPLEMENTED; INSTALLMENT EXTENSION IN PROGRESS).**
+Accepted commissions become draft orders linked to an `order_payment_collection` via `convert-commission-to-order.ts`. The initial Razorpay modal and webhook-recovery flow are implemented. The current working tree changes that first collection to a 50% deposit; successful capture moves the commission to `in_production`, then the admin requests the remaining balance and the customer pays it from the account commission page. Only verified capture of the balance marks the commission `paid`. See section 5 item 37; the new migration and live/test-mode lifecycle still need verification.
 
 ---
 
@@ -611,9 +633,9 @@ Accepted commissions become draft orders linked to an `order_payment_collection`
 
 **S1. Enforce CSP.** Currently `Content-Security-Policy-Report-Only` with `localhost` entries and `unsafe-eval`/`unsafe-inline`. Add Razorpay hosts (`checkout.razorpay.com` script, `api.razorpay.com` frame/connect, their analytics host), Supabase if used, remove localhost in production, collect reports for a week, then enforce.
 
-**S2. Edge security and rate limiting.** `rate-limit.ts` is in-memory and only guards login and register. On serverless it does almost nothing. Move to Upstash Redis or Cloudflare rules and cover: login, register, password reset, inquiry, contact, feedback, trade, commission upload-url.
+**S2. Edge security and rate limiting (PARTIALLY RESOLVED — B6).** B6 added a pluggable Upstash-backed limiter with fail-closed production configuration for supported public forms and related flows, plus Turnstile and honeypots on supported forms. Verify every sensitive route’s limiter coverage in deployment and add Cloudflare/WAF edge rules; do not rely on the original in-memory login/register limiter for production protection.
 
-**S3. Public upload endpoint.** `POST /store/feedback` accepts an image through multer, trusts the client MIME type only, stores it as public, and has no rate limit. Add magic-byte checks, size limit, rate limit and captcha, or drop image upload. The backend model (`type: feedback|bug`, `message`, `status: new|reviewed|resolved`) also differs from the fields described in section 5 item 22.
+**S3. Public upload endpoint (PARTIALLY RESOLVED).** `POST /store/feedback` accepts an image through multer and still needs verified magic-byte/content validation and a confirmed size limit. B6 added shared rate limiting and Turnstile coverage for supported public forms; verify that this route is included in deployed configuration. The backend model (`type: feedback|bug`, `message`, `status: new|reviewed|resolved`) also differs from the fields described in section 5 item 22.
 
 **S4. Remove dead starter code.** `/[countryCode]/(main)` and `/[countryCode]/(checkout)` routes, `api/payment-return` (Stripe only), `stripe-wrapper`, PayPal/iDEAL icons, `medusa-cta`, `product-onboarding-cta` and `lib/data/onboarding.ts` (redirects to `localhost:7001`), `store/custom` and `admin/custom` stub routes. The middleware is a no-op, so these duplicate pages are reachable and indexable.
 
@@ -629,7 +651,7 @@ Accepted commissions become draft orders linked to an `order_payment_collection`
 
 **S10. SEO.** `next-sitemap.js` uses `NEXT_PUBLIC_VERCEL_URL` (should be the site URL) and builds its exclude list with `array + array` (string concatenation). Add Product JSON-LD, Open Graph images, canonical URLs, `robots` rules, 404/500 pages (`error.tsx`, `global-error.tsx` do not exist).
 
-**S11. Guest order page.** `getOrder` retrieves `/store/orders/:id` without auth headers. Test as a guest and as a logged-in user to make sure the confirmation page works and cannot be used to read other people's orders.
+**S11. Guest order page and tracking access.** `getOrder` retrieves `/store/orders/:id` without auth headers, and the new `/store/orders/:order_id/tracking` endpoint looks up fulfillment tracking by order ID. Test guest and authenticated flows and verify that neither endpoint can expose another customer's order or shipment data; the tracking UI being implemented does not close this access-control item.
 
 **S12. Admin access.** Create real admin users, remove any seed/test accounts, restrict `/app` by IP or SSO if possible, and use separate `ADMIN_CORS` / `AUTH_CORS` for production domains only.
 
@@ -653,7 +675,7 @@ Accepted commissions become draft orders linked to an `order_payment_collection`
 - Trade customer group with automatic discount pricing; trade status emails.
 - Analytics and consent banner (if you actually add analytics).
 - Integration (HTTP) tests, Playwright end-to-end tests, load test.
-- Order tracking page, invoices PDF, return/refund workflow in admin.
+- Invoice PDF and return/refund workflow in admin. The order tracking page is implemented (section 5 item 36), but its access-control validation remains open under S11.
 - International shipping is out of scope (India only).
 
 ---
@@ -695,7 +717,9 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [x] **B8a — Razorpay refund hardening:** throw on missing payment ID, validate amount against captured payment, ensure idempotency via receipt/notes, safe logging without secrets, 8 unit tests passed (section 5 item 29)
 - [x] **B4 — Redis infrastructure & worker mode:** event bus, workflow engine, distributed locking, caching, workerMode, production startup guard, docs/infrastructure.md, 14 unit tests passed (section 5 item 30)
 - [x] **B6 — Contact, inquiry & newsletter that never lose data:** Custom Medusa inquiry module, NewsletterSubscriber double opt-in, salted IP hashing, Resend studio & confirmation emails, Turnstile bot protection, honeypots, pluggable Upstash rate limiter with fail-closed production guard, Next.js /api/inquiry honest 502 proxy, Admin Inquiries & Newsletter dashboard, 16 backend + 14 storefront tests passed (section 5 item 31)
-- [x] **B10 — Commission payment path:** Accepted commissions convert to draft orders with order_payment_collection, Razorpay checkout modal from /account and dedicated /pay page, completeCommissionPayment workflow, auto-recovery via webhook reconciliation, 13 backend + 5 storefront tests passed (section 5 item 32)
+- [x] **B10 — Commission payment foundation:** Accepted commissions convert to draft orders with order_payment_collection, Razorpay checkout modal from /account and dedicated /pay page, payment-completion workflow, and webhook recovery (section 5 item 32)
+- [x] **Commission lifecycle hardening:** Central transition and payment guards, customer ownership/request validation, private R2 commission image handling, admin lifecycle controls, and status notification support (section 5 item 35)
+- [x] **Live order tracking UI and endpoint:** Customer order/payment/fulfillment status refreshes every 15 seconds and displays shipment tracking references/links (section 5 item 36; S11 access testing remains open)
 - [x] **Production-Grade Saved (Wishlist) feature:** Custom Medusa wishlist module, composite unique index, migration, authenticated Store API (GET, POST, DELETE, merge), hybrid guest/logged-in store, optimistic UI with rollback, SavedToast, SavedAuthSync, 200 items cap, stale item pruning, docs/saved-feature.md, 13 backend + 8 storefront unit tests passed (section 5 item 33)
 - [x] **Direct UPI with manual verification:** Flag-gated `pp_upimanual_upimanual`, UPI payment module/migration, checkout and proof flow, Admin verification/rejection/cancellation, hourly expiry, notifications, refund guidance, production allowlist, docs, fixture flow script, and tests (section 5 item 34)
 
@@ -727,6 +751,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Integration test for replay check against real PostgreSQL
 - [ ] Test matrix in Razorpay test mode: success, failed, cancelled, closed tab, double click, amount change after order creation, expired order
 - [ ] Verify webhook retries are idempotent (same event twice)
+- [ ] Verify commission deposit and final-balance flow in Razorpay test mode: deposit capture, admin final-payment request/email, balance capture, odd-rupee split, failed/retried payment, duplicate callback/webhook, and pay-then-close-tab recovery
 - [ ] Decide refund policy and document "refund only from Medusa Admin"
 - [x] Decide commission payment path (payment link or cart) and build it (B10)
 - [ ] Add Razorpay hosts to CSP and test in report-only first (S1)
@@ -780,7 +805,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Magic link checkout (Option C)
 - [ ] Trade customer group and discount pricing
 - [ ] Playwright end-to-end suite and HTTP integration tests
-- [ ] Invoice PDF and order tracking page
+- [ ] Invoice PDF
 
 ---
 
@@ -788,42 +813,39 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 
 The following historical documentation drift items have been audited and corrected across this file and the repository:
 
-- **Rate Limiting (Section 5 items 11 & 17):** Corrected. Clarified that while edge/distributed rate limiting remains postponed to deployment, an in-memory sliding window limiter (`apps/storefront/src/lib/security/rate-limit.ts`) exists and exclusively guards the `login` and `register` server actions.
+- **Rate Limiting (Section 5 items 11 & 17, B6):** Updated. The in-memory login/register limiter is historical; B6 added a pluggable Upstash-backed limiter and Turnstile/honeypot protections for supported public forms. Cloudflare/WAF deployment rules and route-by-route production coverage still need verification.
 - **Feedback Module (Section 5 item 22):** Corrected. Updated the documented data model to match the real schema (`type: feedback|bug`, `message`, `email`, `page_url`, `image_url`, `status: new|reviewed|resolved`) and corrected the migration name to `Migration20261026102431`.
 - **Local Machine Status (Section 3):** Corrected. Renamed "Current Live Status" to "Local Development Status (No Deployed Environment Yet)" and explicitly documented that all endpoints reflect local developer testing, with deployed environments still pending.
 - **Starter Documentation Drift (Root README.md, AGENTS.md, & Env Examples):** Corrected. Rewrote `README.md` and `AGENTS.md` to document the real LITA platform (`npm`, Razorpay, India/INR only). Updated `NEXT_PUBLIC_DEFAULT_REGION` from `dk` to `in` in storefront `.env.example` and `.env.template`, and removed dead Stripe references.
-- **Razorpay Currency Enforcement:** Clarified. The old roadmap claimed "INR currency enforcement" was complete; in reality, INR currency enforcement is strictly enforced at authorization (`authorizePayment`), but is not enforced at session initiation (`initiatePayment`, which currently passes the cart currency through to Razorpay without asserting `inr`).
+- **Razorpay Currency Enforcement:** Updated after B8c. INR is guarded at payment initiation and update as well as authorization; retain the non-INR regression tests and still complete the separate real-PostgreSQL replay-protection integration test.
 
 ---
 
 ## 10. Ready-to-Use Prompts
 
-### Prompt 1: Close the security blockers (CP1)
+These prompts target work that is still open as of 5 Nov 2026. Do not repeat completed CP0, B1-B6, or B8a-c tasks unless new evidence shows a regression.
+
+### Prompt 1: Verify commission installments (CP2)
 ```text
-Refer to PROJECT_PROGRESS.md section 6.2 (B1, B2, B3, B8).
-Fix these in order, with a unit test for each:
-1. Remove pp_system_default from the production checkout path.
-2. Make /api/revalidate reject when REVALIDATE_SECRET is unset; timing-safe compare; remove GET.
-3. Require customer auth on GET /store/trade-applications and filter by email in the query.
-4. Strip webhook_verified and client razorpay_order_id in the Razorpay provider; make refundPayment throw without a payment id.
+Use PROJECT_PROGRESS.md section 5 item 37 and CP2. Review the current 50% deposit/final-balance implementation and its migration. Run the focused backend and storefront tests, then verify the Razorpay test-mode lifecycle: deposit success, odd-rupee quote split, failed/retried payment, admin final-payment request and email, balance capture, duplicate callback/webhook, and pay-then-close-tab recovery. Confirm migration state before applying it to any database. Report observed results and unresolved risks; do not claim production readiness from unit tests alone.
 ```
 
-### Prompt 2: Redis and worker setup (CP4)
+### Prompt 2: Build a staging and release pipeline (CP4)
 ```text
-Refer to PROJECT_PROGRESS.md B4. Add Redis event bus, workflow engine, locking and cache modules to apps/backend/medusa-config.ts, driven by REDIS_URL, with dev fallback to in-memory when REDIS_URL is unset and a startup guard in production. Add workerMode support and update the env templates. Check module names against the Medusa 2.21 docs first.
+Use PROJECT_PROGRESS.md sections 6.3 and CP4. Add the smallest maintainable CI and staging setup for the Medusa backend, worker, and Next.js storefront. Include install, lint, typecheck, unit tests, build, migration handling, separate Razorpay test credentials/webhook, and a rollback procedure. Preserve existing Redis/worker configuration and do not expose secrets in logs or repository files.
 ```
 
-### Prompt 3: Transactional emails (CP3)
+### Prompt 3: Close order access checks (S11)
 ```text
-Refer to PROJECT_PROGRESS.md B5. Add the Medusa Notification module with a Resend provider, then subscribers for order.placed, order.fulfillment_created, trade application status changes and commission status changes. Reuse the editorial email styling from subscribers/password-reset.ts. Do not log reset links in production.
+Use PROJECT_PROGRESS.md section 6.3 S11 and section 5 item 36. Trace guest and authenticated access to /store/orders/:id and /store/orders/:order_id/tracking, including the order confirmation and account pages. Add focused tests proving one customer cannot retrieve another customer's status or shipment details; fix the server-side access check if needed. Do not treat an unguessable order ID as authorization.
 ```
 
-### Prompt 4: Clean build baseline (CP0)
+### Prompt 4: Prepare India legal and tax content (CP5)
 ```text
-Refer to PROJECT_PROGRESS.md B7 and S4. Remove the storefront lockfile, delete unused Stripe/PayPal/onboarding/search starter code, declare any remaining undeclared imports, turn off ignoreBuildErrors and ignoreDuringBuilds, and fix every TypeScript and ESLint error until `npm ci && npm run build` passes from a clean clone.
+Use PROJECT_PROGRESS.md CP5 and docs/commission-module-guide.md. Inventory the current privacy, terms, shipping, returns, commission and invoice content. Draft only business facts supported by the owner; mark GST rates, HSN codes, seller/grievance details, refund timelines and legal interpretations for CA/lawyer review instead of inventing them. Provide a checklist of owner inputs and files that need approval.
 ```
 
-### Prompt 5: Razorpay live-mode checklist (CP6)
+### Prompt 5: Complete the Razorpay go-live checklist (CP6)
 ```text
-Refer to PROJECT_PROGRESS.md and docs/razorpay.md. Walk me through Razorpay Live mode activation: KYC status, auto-capture, live keys, live webhook and events, a 1 INR test payment and a refund from Medusa Admin. Verify each step against the code in apps/backend/src/modules/razorpay and apps/storefront/src/modules/checkout/components/payment-button.
+Use PROJECT_PROGRESS.md CP6 and docs/razorpay.md. Verify KYC, auto-capture, live key configuration, webhook URL/events/secret, a 1 INR live payment and refund from Medusa Admin, CSP enforcement, and alert readiness. Check the current Razorpay provider and commission installment flow before proposing changes. Never request or print secret values; record only whether each check is complete.
 ```

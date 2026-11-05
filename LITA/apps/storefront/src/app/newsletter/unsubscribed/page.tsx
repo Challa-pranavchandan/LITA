@@ -10,7 +10,10 @@ export default function NewsletterUnsubscribedPage() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-6 py-20 bg-[#FAF9F7]">
       <div className="w-full max-w-lg bg-white border border-[#E5E5E5] p-8 sm:p-12 text-center shadow-sm">
-        <h1 className="text-3xl font-serif text-[#111111] tracking-tight mb-4">
+        <h1
+          className="font-cormorant text-3xl sm:text-4xl font-normal text-[#111111] tracking-tight mb-4"
+          style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
+        >
           You Have Been Unsubscribed
         </h1>
         <p className="text-[#555555] text-sm sm:text-base leading-relaxed mb-8">
@@ -18,7 +21,7 @@ export default function NewsletterUnsubscribedPage() {
         </p>
         <div className="flex justify-center">
           <Link href="/" className="btn-solid">
-            Return to Gallery
+            Return to Gallery &rarr;
           </Link>
         </div>
       </div>

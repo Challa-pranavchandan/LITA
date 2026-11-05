@@ -17,6 +17,8 @@ export const Commission = model.define("commission", {
       "quoted",
       "accepted",
       "awaiting_payment",
+      "in_production",
+      "awaiting_final_payment",
       "paid",
       "converted",
       "rejected",
@@ -30,6 +32,11 @@ export const Commission = model.define("commission", {
   images: model.json().nullable(),
   paid_at: model.dateTime().nullable(),
   payment_reference: model.text().nullable(),
+  deposit_paid_at: model.dateTime().nullable(),
+  deposit_payment_reference: model.text().nullable(),
+  final_payment_requested_at: model.dateTime().nullable(),
+  final_paid_at: model.dateTime().nullable(),
+  final_payment_reference: model.text().nullable(),
 })
 
 export default Commission

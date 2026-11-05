@@ -755,7 +755,9 @@ export function AccountDashboard({
 
             <div className="divide-y divide-[#eeeeee]">
               {commissions.map((c) => {
-                const canPay = c.status === "awaiting_payment";
+                const canPay =
+                  c.status === "awaiting_payment" ||
+                  c.status === "awaiting_final_payment";
                 const hasQuote = c.status === "quoted" && Boolean(c.quoted_price);
                 const isPaid = c.status === "paid" || !!c.paid_at;
 
@@ -809,6 +811,11 @@ export function AccountDashboard({
                       {isPaid && (
                         <span className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded inline-block">
                           Paid · {c.order_id ? `Order #${c.order_id.slice(-6).toUpperCase()}` : "Confirmed"}
+                        </span>
+                      )}
+                      {c.status === "in_production" && (
+                        <span className="text-xs font-medium text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded inline-block">
+                          Deposit received · In production
                         </span>
                       )}
                       <Link

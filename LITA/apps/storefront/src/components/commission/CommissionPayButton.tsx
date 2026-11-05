@@ -223,7 +223,9 @@ export function CommissionPayButton({
 
       {statusState === "success" && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 rounded">
-          Payment successfully verified! Your commission order is placed.
+          {commission.status === "awaiting_final_payment"
+            ? "Final payment successfully verified! Your commission is fully paid and ready for packing."
+            : "Deposit successfully verified! The studio will begin creating your commission."}
         </div>
       )}
 
@@ -246,7 +248,16 @@ export function CommissionPayButton({
                 ? "Verifying Payment..."
                 : "Securing Order..."
               : commission.quoted_price
-              ? `Pay Now · ${formatMoney(commission.quoted_price, commission.currency_code || "INR")}`
+              ? `${
+                  commission.status === "awaiting_final_payment"
+                    ? "Pay Remaining 50%"
+                    : "Pay 50% Deposit"
+                } · ${formatMoney(
+                  commission.status === "awaiting_final_payment"
+                    ? commission.quoted_price - Math.ceil(commission.quoted_price / 2)
+                    : Math.ceil(commission.quoted_price / 2),
+                  commission.currency_code || "INR"
+                )}`
               : "Pay Now"}
           </button>
           <p className="text-[11px] text-neutral-500 mt-1.5">

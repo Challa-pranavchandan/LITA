@@ -74,6 +74,14 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const updatePayload: any = { id }
 
   if (status !== undefined) {
+    if (
+      status !== existing.status &&
+      ["awaiting_payment", "in_production", "awaiting_final_payment", "paid"].includes(status)
+    ) {
+      return res.status(400).json({
+        message: "Payment lifecycle statuses can only be changed by the commission payment workflow.",
+      })
+    }
     if (status !== existing.status) {
       try {
         assertCommissionTransition(
@@ -89,7 +97,13 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   if (quoted_price !== undefined) {
     if (
-      ["accepted", "awaiting_payment", "paid"].includes(existing.status) &&
+      [
+        "accepted",
+        "awaiting_payment",
+        "in_production",
+        "awaiting_final_payment",
+        "paid",
+      ].includes(existing.status) &&
       quoted_price !== existing.quoted_price
     ) {
       return res.status(400).json({
@@ -109,10 +123,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     status === "quoted" &&
     (typeof resultingQuote !== "number" ||
       !Number.isFinite(resultingQuote) ||
-      resultingQuote <= 0)
+    resultingQuote < 2)
   ) {
     return res.status(400).json({
-      message: "A valid positive quote is required before marking the commission quoted.",
+    message: "A quote of at least 2 is required before marking the commission quoted.",
     })
   }
 

@@ -5,7 +5,10 @@ import { BrowseFilters } from "@/components/BrowseFilters";
 import { Pagination } from "@/components/Pagination";
 
 export const revalidate = 60;
-export const metadata: Metadata = { title: "All artwork" };
+export const metadata: Metadata = {
+  title: "Original Artwork Catalog | Livin In The Art",
+  description: "Browse the curated collection of original contemporary paintings and fine artwork at Livin In The Art.",
+};
 
 type SearchParams = {
   q?: string;
@@ -42,14 +45,24 @@ export default async function ArtworksPage({
   const { page: _page, ...filterParams } = sp;
 
   return (
-    <div className="page py-10">
-      <header className="mb-10 flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-3xl">
-          {sp.q ? `Results for "${sp.q}"` : "All artwork"}
-        </h1>
-        <p className="text-graphite tabular-nums">
-          {result.total} {result.total === 1 ? "work" : "works"}
-        </p>
+    <div className="page py-10 md:py-14">
+      <header className="mb-10 border-b border-[#E5E7EB] pb-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <span className="block text-xs font-sans font-medium uppercase tracking-[0.25em] text-[#5C6168] mb-2">
+              Curated Catalog
+            </span>
+            <h1
+              className="font-cormorant text-4xl sm:text-5xl md:text-[52px] font-normal text-ink leading-none tracking-tight"
+              style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
+            >
+              {sp.q ? `Results for "${sp.q}"` : "All Original Artwork"}
+            </h1>
+          </div>
+          <p className="text-sm font-sans uppercase tracking-wider text-graphite tabular-nums pb-1">
+            {result.total} {result.total === 1 ? "piece" : "pieces"} on view
+          </p>
+        </div>
       </header>
       <div className="grid gap-10 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-14">
         <aside className="lg:sticky lg:top-24 lg:self-start">

@@ -9,6 +9,7 @@ import {
   MedusaError,
   Modules,
   OrderStatus,
+  ProductStatus,
   ContainerRegistrationKeys,
 } from "@medusajs/framework/utils"
 import {
@@ -21,6 +22,7 @@ import {
   assertCommissionCanConvert,
   emitCommissionStatusChanged,
 } from "../lib/commission-status"
+import { getCommissionInstallmentAmounts } from "../lib/commission-payment"
 
 export type ConvertCommissionInput = {
   commission_id: string
@@ -124,9 +126,16 @@ export const resolveCommissionVariantStep = createStep(
     )
 
     if (existing.length > 0 && existing[0].variants?.length > 0) {
+      const product = existing[0]
+      if (product.status !== ProductStatus.PUBLISHED) {
+        await productService.updateProducts(product.id, {
+          status: ProductStatus.PUBLISHED,
+        })
+      }
+
       return new StepResponse({
-        variant_id: existing[0].variants[0].id,
-        product_id: existing[0].id,
+        variant_id: product.variants[0].id,
+        product_id: product.id,
       })
     }
 
@@ -136,6 +145,7 @@ export const resolveCommissionVariantStep = createStep(
         title: "Custom Commission",
         handle: "custom-commission",
         description: "Bespoke commissioned artwork",
+        status: ProductStatus.PUBLISHED,
         options: [{ title: "Type", values: ["Custom Artwork"] }],
         variants: [
           {
@@ -233,7 +243,7 @@ export const createCommissionPaymentCollectionStep = createStep(
     const { result } = await createOrderPaymentCollectionWorkflow(container).run({
       input: {
         order_id,
-        amount: Number(amount || 0),
+        amount: amount == null ? 0 : getCommissionInstallmentAmounts(amount).deposit,
       },
     })
     const paymentCollection = Array.isArray(result) ? result[0] : result

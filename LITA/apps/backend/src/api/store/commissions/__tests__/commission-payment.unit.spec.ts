@@ -137,7 +137,7 @@ describe("Commission Payment Path (B10 Hardening)", () => {
           { commission_id: "com_1", customer_id: "cus_123" },
           container
         )
-      ).rejects.toThrow(/greater than 0/)
+      ).rejects.toThrow(/at least 2/)
     })
 
     it("accepts a valid awaiting_payment commission", async () => {
@@ -162,6 +162,55 @@ describe("Commission Payment Path (B10 Hardening)", () => {
       )
 
       expect(result).toEqual(commissionData)
+    })
+
+    it("accepts a final payment only after the studio requests it", async () => {
+      const commissionData = {
+        id: "com_final",
+        customer_id: "cus_123",
+        status: "awaiting_final_payment",
+        quoted_price: 75001,
+        final_payment_requested_at: new Date(),
+        deposit_paid_at: new Date(),
+        order_id: "order_123",
+      }
+      const container = createContainer()
+      container.register({
+        [COMMISSION_MODULE]: asValue({
+          retrieveCommission: jest.fn().mockResolvedValue(commissionData),
+        }),
+      })
+
+      await expect(
+        validateCommissionForSession(
+          { commission_id: "com_final", customer_id: "cus_123" },
+          container
+        )
+      ).resolves.toEqual(commissionData)
+    })
+
+    it("rejects a final payment until the studio requests it", async () => {
+      const container = createContainer()
+      container.register({
+        [COMMISSION_MODULE]: asValue({
+          retrieveCommission: jest.fn().mockResolvedValue({
+            id: "com_final",
+            customer_id: "cus_123",
+            status: "awaiting_final_payment",
+            quoted_price: 75000,
+            deposit_paid_at: new Date(),
+            final_payment_requested_at: null,
+            order_id: "order_123",
+          }),
+        }),
+      })
+
+      await expect(
+        validateCommissionForSession(
+          { commission_id: "com_final", customer_id: "cus_123" },
+          container
+        )
+      ).rejects.toThrow(/has not requested/)
     })
 
     it("rejects legacy converted commissions from payment initiation", async () => {

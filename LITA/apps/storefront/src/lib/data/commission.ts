@@ -41,6 +41,8 @@ export type Commission = {
     | "quoted"
     | "accepted"
     | "awaiting_payment"
+    | "in_production"
+    | "awaiting_final_payment"
     | "paid"
     | "converted"
     | "rejected"
@@ -53,6 +55,11 @@ export type Commission = {
   created_at: string;
   paid_at?: string | null;
   payment_reference?: string | null;
+  deposit_paid_at?: string | null;
+  deposit_payment_reference?: string | null;
+  final_payment_requested_at?: string | null;
+  final_paid_at?: string | null;
+  final_payment_reference?: string | null;
 };
 
 export type CommissionPaymentSessionData = {
@@ -65,6 +72,9 @@ export type CommissionPaymentSessionData = {
   currency_code: string;
   key_id: string;
   title: string;
+  installment: "deposit" | "balance";
+  installment_amount: number;
+  total_amount: number;
 };
 
 /**

@@ -442,6 +442,37 @@ export function commissionStatusTemplate(data: CommissionStatusTemplateData): {
         </div>`
       break
     }
+    case "in_production": {
+      subject = `Commission in Production: "${data.title}" — Livin In The Art`
+      headerText = "Your Artwork Is in Production"
+      bodyContent = `
+        <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+          ${data.customerName ? `Dear ${escapeHtml(data.customerName)}, ` : ""}We have received the 50% upfront payment for <strong>"${escapeHtml(data.title)}"</strong> and work on your commissioned artwork is underway.
+        </p>
+        <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+          The remaining 50% will be due once the artwork is ready, before it is packed.
+        </p>
+        <div style="margin: 28px 0; text-align: left;">
+          <a href="${commissionsUrl}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">
+            View Commission Details
+          </a>
+        </div>`
+      break
+    }
+    case "awaiting_final_payment": {
+      subject = `Final Commission Payment Due: "${data.title}" — Livin In The Art`
+      headerText = "Artwork Ready for Packing"
+      bodyContent = `
+        <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+          ${data.customerName ? `Dear ${escapeHtml(data.customerName)}, ` : ""}Your commissioned artwork <strong>"${escapeHtml(data.title)}"</strong> is ready for packing. The remaining 50% of the quoted price is now due.
+        </p>
+        <div style="margin: 28px 0; text-align: left;">
+          <a href="${commissionsUrl}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">
+            Pay Remaining Balance
+          </a>
+        </div>`
+      break
+    }
     case "paid": {
       subject = `Payment Confirmed: "${data.title}" — Livin In The Art`
       headerText = "Commission Payment Received"
@@ -450,7 +481,7 @@ export function commissionStatusTemplate(data: CommissionStatusTemplateData): {
           ${data.customerName ? `Dear ${escapeHtml(data.customerName)}, ` : ""}We have received your payment of <strong>${data.quotedPrice ? formatCurrency(data.quotedPrice, currency) : ""}</strong> for your commissioned artwork <strong>"${escapeHtml(data.title)}"</strong>.
         </p>
         <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #555555;">
-          The studio will now proceed with creating your bespoke piece. You can track updates and discussion anytime in your account.
+          Your commission is fully paid and will proceed to packing. You can track updates and discussion anytime in your account.
         </p>
         <div style="margin: 28px 0; text-align: left;">
           <a href="${commissionsUrl}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">

@@ -1,14 +1,14 @@
 # Custom Commission Module (Next.js + Medusa v2 + Cloudflare R2)
 
-Flow: Client submits a request (images -> private R2) -> the studio discusses and quotes it -> the customer accepts -> the studio converts it to a draft order -> the customer pays through Razorpay. Acceptance does not create an order.
+Flow: Client submits a request (images -> private R2) -> the studio discusses and quotes it -> the customer accepts -> the studio converts it to a draft order -> the customer pays a 50% deposit through Razorpay. The remaining 50% is requested when the artwork is ready, before packing. Acceptance does not create an order.
 
-The commission is separate from ordinary artwork checkout. Its status path is `new -> in_discussion -> quoted -> accepted -> awaiting_payment -> paid`. Fixed-price charcoal portraits start as `quoted`; their price is calculated by the backend. `converted` is retained only for old records and is not accepted by current payment endpoints.
+The commission is separate from ordinary artwork checkout. Its status path is `new -> in_discussion -> quoted -> accepted -> awaiting_payment -> in_production -> awaiting_final_payment -> paid`. Fixed-price charcoal portraits start as `quoted`; their price is calculated by the backend. `converted` is retained only for old records and is not accepted by current payment endpoints.
 
 ---
 
 ## 1. Data model
 
-Commission statuses: `new -> in_discussion -> quoted -> accepted -> awaiting_payment -> paid` (plus `rejected` and `cancelled`).
+Commission statuses: `new -> in_discussion -> quoted -> accepted -> awaiting_payment -> in_production -> awaiting_final_payment -> paid` (plus `rejected` and `cancelled`).
 
 `src/modules/commission/models/commission.ts`
 ```ts
@@ -25,13 +25,19 @@ export const Commission = model.define("commission", {
   budget: model.number().nullable(),
   deadline: model.dateTime().nullable(),
   status: model.enum([
-    "new","in_discussion","quoted","accepted","converted","rejected","cancelled",
+    "new","in_discussion","quoted","accepted","awaiting_payment",
+    "in_production","awaiting_final_payment","paid","converted","rejected","cancelled",
   ]).default("new"),
   quoted_price: model.number().nullable(),     // INR major units
   currency_code: model.text().default("inr"),
   admin_notes: model.text().nullable(),
   order_id: model.text().nullable(),           // filled on conversion
   images: model.json(),                        // [{ key, filename, mime, size }] (R2 object keys)
+  deposit_paid_at: model.dateTime().nullable(),
+  deposit_payment_reference: model.text().nullable(),
+  final_payment_requested_at: model.dateTime().nullable(),
+  final_paid_at: model.dateTime().nullable(),
+  final_payment_reference: model.text().nullable(),
 })
 ```
 Optional second model `commission_message` (commission_id, sender: "client"|"admin", body, created_at) if you want negotiation inside the dashboard instead of email/WhatsApp.
@@ -121,13 +127,12 @@ import { createDraftOrderWorkflow } from "@medusajs/medusa/core-flows"
 //             metadata: { commission_id, title } }],
 //   shipping_address, metadata: { commission_id }
 // }})
-// step 3: create payment collection and update commission -> { status: "awaiting_payment", order_id }
+// step 3: create a 50% deposit payment collection and update commission -> { status: "awaiting_payment", order_id }
 ```
-The workflow rejects unaccepted/previously converted commissions, validates the quote, links the draft order, and creates its payment collection. A retry is rejected before creating another draft order.
+The workflow rejects unaccepted/previously converted commissions, validates the quote, ensures the backing Custom Commission product is published, links the draft order, and creates the first 50% payment collection. For odd whole-rupee quotes, the deposit is rounded up and the balance is the remainder.
 
-Payment completion is a separate workflow. It verifies the client callback through the Razorpay provider or accepts a provider-authenticated webhook, captures payment, converts the draft order to a regular order, and only then marks the commission `paid`. Failed/cancelled attempts do not change the commission status, so the customer can retry.
+Payment completion is a separate workflow. The verified deposit converts the draft order to a regular order and moves the commission to `in_production`. When the artwork is ready to pack, an admin uses **Request Final 50%**; the customer is emailed and can pay the balance from the commission page. Only verified capture of the balance moves the commission to `paid`. Failed/cancelled attempts do not advance the status, so the customer can retry.
 
-The existing "pay" question (full payment vs 50% advance) is a business choice - for commissions, many artists take an advance. You can model that as two payment collections later; start with full.
 
 ## 6. Admin dashboard UI
 

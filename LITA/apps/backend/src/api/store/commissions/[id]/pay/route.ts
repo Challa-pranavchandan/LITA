@@ -57,7 +57,10 @@ export async function POST(req: MedusaRequest<PayRequestBody>, res: MedusaRespon
 
     return res.status(200).json({
       success: true,
-      message: "Commission payment verified and completed successfully.",
+      message:
+        result.commission.status === "paid"
+          ? "Commission payment verified and completed successfully."
+          : "The 50% deposit is confirmed. Commission production can begin.",
       commission: result.commission,
       order: result.order,
     })

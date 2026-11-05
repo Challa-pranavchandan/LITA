@@ -38,6 +38,8 @@ describe("commission status notification subscriber", () => {
     "quoted",
     "accepted",
     "awaiting_payment",
+    "in_production",
+    "awaiting_final_payment",
     "paid",
     "converted",
     "rejected",

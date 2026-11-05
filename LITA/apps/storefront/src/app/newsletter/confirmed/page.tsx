@@ -21,7 +21,10 @@ export default async function NewsletterConfirmedPage(props: {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-amber-50 text-amber-700 mb-6 text-xl">
               !
             </div>
-            <h1 className="text-3xl font-serif text-[#111111] tracking-tight mb-4">
+            <h1
+              className="font-cormorant text-3xl sm:text-4xl font-normal text-[#111111] tracking-tight mb-4"
+              style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
+            >
               Link Expired or Invalid
             </h1>
             <p className="text-[#555555] text-sm sm:text-base leading-relaxed mb-8">
@@ -38,7 +41,10 @@ export default async function NewsletterConfirmedPage(props: {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 mb-6 text-xl">
               ✓
             </div>
-            <h1 className="text-3xl font-serif text-[#111111] tracking-tight mb-4">
+            <h1
+              className="font-cormorant text-3xl sm:text-4xl font-normal text-[#111111] tracking-tight mb-4"
+              style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
+            >
               Subscription Confirmed
             </h1>
             <p className="text-[#555555] text-sm sm:text-base leading-relaxed mb-8">
@@ -46,9 +52,9 @@ export default async function NewsletterConfirmedPage(props: {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/artworks" className="btn-solid">
-                Explore Artworks
+                Explore Artworks &rarr;
               </Link>
-              <Link href="/journal" className="btn-ghost">
+              <Link href="/journal" className="btn-line">
                 Read Studio Journal
               </Link>
             </div>

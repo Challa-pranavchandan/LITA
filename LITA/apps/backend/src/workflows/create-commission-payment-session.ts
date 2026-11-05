@@ -15,6 +15,12 @@ import {
 } from "@medusajs/core-flows"
 import { COMMISSION_MODULE } from "../modules/commission"
 import CommissionModuleService from "../modules/commission/service"
+import {
+  getCommissionInstallmentAmount,
+  getCommissionPaymentInstallment,
+  requireCommissionPaymentInstallment,
+  type CommissionInstallment,
+} from "../lib/commission-payment"
 
 export type CreateCommissionPaymentSessionInput = {
   commission_id: string
@@ -31,6 +37,9 @@ export type CommissionPaymentSessionData = {
   currency_code: string
   key_id: string
   title: string
+  installment: CommissionInstallment
+  installment_amount: number
+  total_amount: number
 }
 
 /* ---------------- STEP 1: Validate Commission Ownership & Status ---------------- */
@@ -57,10 +66,10 @@ export async function validateCommissionForSession(
     )
   }
 
-  if (commission.status !== "awaiting_payment") {
+  if (!getCommissionPaymentInstallment(commission.status)) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
-      `Commission status is '${commission.status}'. Payment can only be initiated for commissions awaiting payment.`
+      `Commission status is '${commission.status}'. Payment can only be initiated for commissions awaiting payment or final payment.`
     )
   }
 
@@ -74,11 +83,21 @@ export async function validateCommissionForSession(
   if (
     typeof commission.quoted_price !== "number" ||
     !Number.isSafeInteger(commission.quoted_price) ||
-    commission.quoted_price <= 0
+    commission.quoted_price < 2
   ) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
-      "Commission must have a quoted price greater than 0."
+      "Commission must have a quoted price of at least 2 to split into two payments."
+    )
+  }
+
+  if (
+    commission.status === "awaiting_final_payment" &&
+    !commission.final_payment_requested_at
+  ) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "The studio has not requested the final payment yet."
     )
   }
 
@@ -96,14 +115,30 @@ export const validateCommissionForSessionStep = createStep(
   }
 )
 
+export const resolveCommissionPaymentInstallmentStep = createStep(
+  "resolve-commission-payment-installment",
+  async (commission: any) =>
+    new StepResponse(
+      requireCommissionPaymentInstallment(commission.status)
+    )
+)
+
 /* ---------------- STEP 2: Ensure Payment Collection for Order ---------------- */
+
+type EnsurePaymentCollectionInput = {
+  commission: any
+  installment: CommissionInstallment
+}
 
 export const ensureOrderPaymentCollectionStep = createStep(
   "ensure-order-payment-collection",
-  async (commission: any, { container }) => {
+  async ({ commission, installment }: EnsurePaymentCollectionInput, { container }) => {
     const query: any = container.resolve(ContainerRegistrationKeys.QUERY)
+    const installmentAmount = getCommissionInstallmentAmount(
+      commission.quoted_price,
+      installment
+    )
 
-    // Check if an order payment collection already exists
     const { data: orderPayCols } = await query.graph({
       entity: "order_payment_collection",
       fields: [
@@ -112,30 +147,70 @@ export const ensureOrderPaymentCollectionStep = createStep(
         "payment_collection.status",
         "payment_collection.amount",
         "payment_collection.currency_code",
+        "payment_collection.metadata",
       ],
       filters: { order_id: commission.order_id },
     })
 
-    const existing = orderPayCols?.find(
+    const activeCollections = orderPayCols?.filter(
       (opc: any) =>
         opc.payment_collection &&
         opc.payment_collection.status !== "canceled" &&
         opc.payment_collection.status !== "completed"
     )
+    const existing = activeCollections?.find(
+      (opc: any) =>
+        opc.payment_collection.metadata?.commission_installment === installment
+    ) || (
+      installment === "deposit"
+        ? activeCollections?.find(
+            (opc: any) =>
+              !opc.payment_collection.metadata?.commission_installment
+          )
+        : undefined
+    )
 
     if (existing?.payment_collection?.id) {
-      return new StepResponse(existing.payment_collection)
+      const paymentModule: any = container.resolve(Modules.PAYMENT)
+      const collection = existing.payment_collection
+      if (
+        Number(collection.amount) !== installmentAmount ||
+        collection.metadata?.commission_installment !== installment
+      ) {
+        return new StepResponse(
+          await paymentModule.updatePaymentCollections(collection.id, {
+            amount: installmentAmount,
+            metadata: {
+              ...collection.metadata,
+              commission_id: commission.id,
+              commission_installment: installment,
+            },
+          })
+        )
+      }
+      return new StepResponse(collection)
     }
 
     // Create payment collection if missing
     const { result } = await createOrderPaymentCollectionWorkflow(container).run({
       input: {
         order_id: commission.order_id,
-        amount: commission.quoted_price,
+        amount: installmentAmount,
       },
     })
 
-    const paymentCollection = Array.isArray(result) ? result[0] : result
+    const created = Array.isArray(result) ? result[0] : result
+    const paymentModule: any = container.resolve(Modules.PAYMENT)
+    const paymentCollection = await paymentModule.updatePaymentCollections(
+      created.id,
+      {
+        metadata: {
+          ...created.metadata,
+          commission_id: commission.id,
+          commission_installment: installment,
+        },
+      }
+    )
     return new StepResponse(paymentCollection)
   }
 )
@@ -145,21 +220,30 @@ export const ensureOrderPaymentCollectionStep = createStep(
 type CreateSessionInput = {
   commission: any
   payment_collection: any
+  installment: CommissionInstallment
 }
 
 export const createCommissionRazorpaySessionStep = createStep(
   "create-commission-razorpay-session",
-  async ({ commission, payment_collection }: CreateSessionInput, { container }) => {
-    const paymentModule: any = container.resolve(Modules.PAYMENT)
+  async (
+    { commission, payment_collection, installment }: CreateSessionInput,
+    { container }
+  ) => {
+    const installmentAmount = getCommissionInstallmentAmount(
+      commission.quoted_price,
+      installment
+    )
     const providerId = "pp_razorpay_razorpay"
 
-    // Create payment session on the order's payment collection
     const { result: session } = await createPaymentSessionsWorkflow(container).run({
       input: {
         payment_collection_id: payment_collection.id,
         provider_id: providerId,
         customer_id: commission.customer_id,
-        data: {},
+        data: {
+          commission_id: commission.id,
+          commission_installment: installment,
+        },
       },
     })
 
@@ -173,10 +257,13 @@ export const createCommissionRazorpaySessionStep = createStep(
       payment_collection_id: payment_collection.id,
       session_id: session.id,
       razorpay_order_id: razorpayOrderId,
-      amount: sessionData.amount || commission.quoted_price * 100,
+      amount: sessionData.amount || installmentAmount * 100,
       currency_code: (commission.currency_code || "inr").toUpperCase(),
       key_id: keyId,
       title: commission.title,
+      installment,
+      installment_amount: installmentAmount,
+      total_amount: commission.quoted_price,
     }
 
     return new StepResponse(output)
@@ -189,10 +276,15 @@ export const createCommissionPaymentSessionWorkflow = createWorkflow(
   "create-commission-payment-session",
   (input: CreateCommissionPaymentSessionInput) => {
     const commission = validateCommissionForSessionStep(input)
-    const paymentCollection = ensureOrderPaymentCollectionStep(commission)
+    const installment = resolveCommissionPaymentInstallmentStep(commission)
+    const paymentCollection = ensureOrderPaymentCollectionStep({
+      commission,
+      installment,
+    })
     const sessionData = createCommissionRazorpaySessionStep({
       commission,
       payment_collection: paymentCollection,
+      installment,
     })
 
     return new WorkflowResponse(sessionData)

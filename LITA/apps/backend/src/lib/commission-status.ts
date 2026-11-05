@@ -10,6 +10,8 @@ export type CommissionStatus =
   | "quoted"
   | "accepted"
   | "awaiting_payment"
+  | "in_production"
+  | "awaiting_final_payment"
   | "paid"
   | "converted"
   | "rejected"
@@ -20,7 +22,9 @@ const allowedTransitions: Record<CommissionStatus, CommissionStatus[]> = {
   in_discussion: ["quoted", "rejected", "cancelled"],
   quoted: ["in_discussion", "accepted", "rejected", "cancelled"],
   accepted: ["awaiting_payment", "cancelled"],
-  awaiting_payment: ["paid", "cancelled"],
+  awaiting_payment: ["in_production", "cancelled"],
+  in_production: ["awaiting_final_payment"],
+  awaiting_final_payment: ["paid"],
   paid: [],
   converted: [],
   rejected: [],
@@ -59,11 +63,11 @@ export function assertCommissionCanConvert(commission: {
   if (
     typeof commission.quoted_price !== "number" ||
     !Number.isSafeInteger(commission.quoted_price) ||
-    commission.quoted_price <= 0
+    commission.quoted_price < 2
   ) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
-      "Commission must have a valid quoted price greater than 0 before converting to an order."
+      "Commission must have a valid quoted price of at least 2 before converting to an order."
     )
   }
   assertCommissionTransition(commission.status, "awaiting_payment")
@@ -74,22 +78,36 @@ export function assertCommissionPaymentCompletion(
     status: CommissionStatus
     paid_at?: Date | string | null
     payment_reference?: string | null
+    deposit_paid_at?: Date | string | null
+    deposit_payment_reference?: string | null
+    final_paid_at?: Date | string | null
+    final_payment_reference?: string | null
   },
   paymentReference: string
 ): boolean {
-  if (commission.status === "paid" && commission.paid_at) {
-    if (commission.payment_reference !== paymentReference) {
-      throw new MedusaError(
-        MedusaError.Types.CONFLICT,
-        "Commission was already paid with a different Razorpay payment."
-      )
-    }
+  const paymentReferences = [
+    commission.payment_reference,
+    commission.deposit_payment_reference,
+    commission.final_payment_reference,
+  ]
+  if (paymentReferences.includes(paymentReference)) {
     return true
   }
-  if (commission.status !== "awaiting_payment") {
+  if (
+    (commission.status === "paid" && commission.paid_at) ||
+    (commission.status === "in_production" && commission.deposit_paid_at)
+  ) {
+    if (!paymentReferences.includes(paymentReference)) {
+      throw new MedusaError(
+        MedusaError.Types.CONFLICT,
+        "Commission installment was already paid with a different Razorpay payment."
+      )
+    }
+  }
+  if (!["awaiting_payment", "awaiting_final_payment"].includes(commission.status)) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
-      `Commission status is '${commission.status}'. Payment can only complete for commissions awaiting payment.`
+      `Commission status is '${commission.status}'. Payment can only complete while awaiting payment or final payment.`
     )
   }
   return false

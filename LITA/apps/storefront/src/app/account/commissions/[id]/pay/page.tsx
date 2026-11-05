@@ -32,7 +32,16 @@ export default async function CommissionPayPage(props: {
 
   const commission = detail.commission;
   const isPaid = commission.status === "paid" || !!commission.paid_at;
-  const canPay = commission.status === "awaiting_payment";
+  const canPay =
+    commission.status === "awaiting_payment" ||
+    commission.status === "awaiting_final_payment";
+  const depositAmount = commission.quoted_price
+    ? Math.ceil(commission.quoted_price / 2)
+    : null;
+  const balanceAmount =
+    commission.quoted_price && depositAmount !== null
+      ? commission.quoted_price - depositAmount
+      : null;
 
   return (
     <div className="bg-white min-h-[calc(100vh-var(--header-h)-120px)] py-12 md:py-20 px-6 md:px-12">
@@ -165,6 +174,25 @@ export default async function CommissionPayPage(props: {
                       : "Pending Quote"}
                   </span>
                 </div>
+                {depositAmount !== null && balanceAmount !== null && (
+                  <>
+                    <div className="flex justify-between items-center text-xs text-neutral-500">
+                      <span>
+                        50% upfront (to begin work)
+                        {commission.deposit_paid_at ? " · Paid" : ""}
+                      </span>
+                      <span>
+                        {formatMoney(depositAmount, commission.currency_code || "INR")}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-neutral-500">
+                      <span>Remaining 50% (before packing)</span>
+                      <span>
+                        {formatMoney(balanceAmount, commission.currency_code || "INR")}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between items-center text-xs text-neutral-500">
                   <span>Museum-Grade Packaging</span>
                   <span>Complimentary</span>
@@ -226,6 +254,10 @@ export default async function CommissionPayPage(props: {
                     customer={customer}
                   />
                 </div>
+              ) : commission.status === "in_production" ? (
+                <p className="border border-blue-200 bg-blue-50 p-4 text-xs leading-relaxed text-blue-900">
+                  Your 50% upfront payment is confirmed and the studio is creating your artwork. The remaining 50% will be requested when it is ready, before packing.
+                </p>
               ) : (
                 <p className="border border-neutral-200 bg-white p-4 text-xs leading-relaxed text-neutral-600">
                   {commission.status === "accepted"

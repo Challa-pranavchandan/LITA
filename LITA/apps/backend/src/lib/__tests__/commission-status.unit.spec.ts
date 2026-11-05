@@ -20,7 +20,9 @@ describe("commission status state machine", () => {
     ["quoted", "cancelled"],
     ["accepted", "awaiting_payment"],
     ["accepted", "cancelled"],
-    ["awaiting_payment", "paid"],
+    ["awaiting_payment", "in_production"],
+    ["in_production", "awaiting_final_payment"],
+    ["awaiting_final_payment", "paid"],
     ["awaiting_payment", "cancelled"],
   ] as const)("allows %s -> %s", (current, next) => {
     expect(() => assertCommissionTransition(current, next)).not.toThrow()
@@ -33,6 +35,8 @@ describe("commission status state machine", () => {
     ["quoted", "paid"],
     ["accepted", "paid"],
     ["awaiting_payment", "accepted"],
+    ["awaiting_payment", "paid"],
+    ["in_production", "paid"],
     ["paid", "awaiting_payment"],
     ["rejected", "in_discussion"],
     ["cancelled", "quoted"],
@@ -104,6 +108,19 @@ describe("commission order conversion guards", () => {
           "pay_retry"
         )
       ).toBe(false)
+    })
+
+    it("treats a duplicate deposit webhook as idempotent while in production", () => {
+      expect(
+        assertCommissionPaymentCompletion(
+          {
+            status: "in_production",
+            deposit_paid_at: new Date(),
+            deposit_payment_reference: "pay_deposit",
+          },
+          "pay_deposit"
+        )
+      ).toBe(true)
     })
   })
 

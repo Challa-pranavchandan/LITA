@@ -49,6 +49,8 @@ export type Commission = {
     | "quoted"
     | "accepted"
     | "awaiting_payment"
+    | "in_production"
+    | "awaiting_final_payment"
     | "paid"
     | "converted"
     | "rejected"
@@ -61,6 +63,11 @@ export type Commission = {
   created_at: string
   paid_at?: string | null
   payment_reference?: string | null
+  deposit_paid_at?: string | null
+  deposit_payment_reference?: string | null
+  final_payment_requested_at?: string | null
+  final_paid_at?: string | null
+  final_payment_reference?: string | null
   customer?: {
     id: string
     email: string
@@ -76,6 +83,8 @@ const statusBadgeColor: Record<string, "purple" | "blue" | "orange" | "green" | 
   quoted: "orange",
   accepted: "green",
   awaiting_payment: "orange",
+  in_production: "blue",
+  awaiting_final_payment: "orange",
   paid: "green",
   converted: "green",
   rejected: "red",
@@ -88,6 +97,8 @@ const statusLabels: Record<string, string> = {
   quoted: "Quoted",
   accepted: "Quote Accepted",
   awaiting_payment: "Awaiting Payment",
+  in_production: "In Production",
+  awaiting_final_payment: "Final Payment Due",
   paid: "Paid",
   converted: "Converted to Order",
   rejected: "Rejected",
@@ -221,6 +232,22 @@ const CommissionsPage = () => {
     },
   })
 
+  const requestFinalPaymentMutation = useMutation({
+    mutationFn: () =>
+      sdk.client.fetch<{ commission: Commission }>(
+        `/admin/commissions/${selectedCommissionId}/request-final-payment`,
+        { method: "POST" }
+      ),
+    onSuccess: () => {
+      toast.success("Final 50% payment requested")
+      qc.invalidateQueries({ queryKey: ["commissions"] })
+      qc.invalidateQueries({ queryKey: ["commission-detail", selectedCommissionId] })
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to request final payment")
+    },
+  })
+
   const selectedCommission = detailData?.commission || data?.commissions.find((c) => c.id === selectedCommissionId)
   const messages = detailData?.messages || []
   const customer = detailData?.customer || selectedCommission?.customer
@@ -267,6 +294,8 @@ const CommissionsPage = () => {
                 <Select.Item value="quoted">Quoted</Select.Item>
                 <Select.Item value="accepted">Accepted</Select.Item>
                 <Select.Item value="awaiting_payment">Awaiting Payment</Select.Item>
+                <Select.Item value="in_production">In Production</Select.Item>
+                <Select.Item value="awaiting_final_payment">Final Payment Due</Select.Item>
                 <Select.Item value="paid">Paid</Select.Item>
                 <Select.Item value="converted">Converted to Order</Select.Item>
                 <Select.Item value="rejected">Rejected</Select.Item>
@@ -429,16 +458,44 @@ const CommissionsPage = () => {
                 <div className="flex items-center gap-2">
                   <Badge
                     size="small"
-                    color={selectedCommission.status === "paid" ? "green" : "orange"}
+                    color={
+                      selectedCommission.status === "paid"
+                        ? "green"
+                        : selectedCommission.status === "in_production"
+                          ? "blue"
+                          : "orange"
+                    }
                   >
-                    {selectedCommission.status === "paid"
-                      ? "Paid"
-                      : "Awaiting Payment"}
+                    {statusLabels[selectedCommission.status] ||
+                      selectedCommission.status}
                   </Badge>
                   {selectedCommission.payment_reference && (
                     <span className="font-mono text-xs text-ui-fg-muted">
                       Ref: {selectedCommission.payment_reference}
                     </span>
+                  )}
+                  {selectedCommission.deposit_payment_reference && (
+                    <span className="font-mono text-xs text-ui-fg-muted">
+                      Deposit ref: {selectedCommission.deposit_payment_reference}
+                    </span>
+                  )}
+                  {selectedCommission.status === "in_production" && (
+                    <Button
+                      size="small"
+                      variant="primary"
+                      isLoading={requestFinalPaymentMutation.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Request the remaining 50% payment for "${selectedCommission.title}" before packing?`
+                          )
+                        ) {
+                          requestFinalPaymentMutation.mutate()
+                        }
+                      }}
+                    >
+                      Request Final 50%
+                    </Button>
                   )}
                   <Button
                     size="small"

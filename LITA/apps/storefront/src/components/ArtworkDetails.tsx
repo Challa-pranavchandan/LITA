@@ -130,7 +130,10 @@ export function ArtworkDetails({
   return (
     <div className="w-full flex flex-col font-sans">
       {/* Title & Artist */}
-      <h1 className="font-serif text-3xl sm:text-[36px] font-normal text-[#1A1D20] leading-tight tracking-normal">
+      <h1
+        className="font-cormorant text-3xl sm:text-4xl md:text-[42px] font-normal text-[#1A1D20] leading-tight tracking-normal"
+        style={{ fontFamily: "'Cormorant Garamond', 'Garamond', Georgia, serif" }}
+      >
         {title}
       </h1>
 

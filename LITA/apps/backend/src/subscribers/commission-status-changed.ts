@@ -31,6 +31,8 @@ export default async function commissionStatusChangedHandler({
     "quoted",
     "accepted",
     "awaiting_payment",
+    "in_production",
+    "awaiting_final_payment",
     "converted",
     "paid",
     "rejected",

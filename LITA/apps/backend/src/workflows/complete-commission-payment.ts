@@ -24,6 +24,11 @@ import {
   emitCommissionStatusChanged,
   type CommissionStatus,
 } from "../lib/commission-status"
+import {
+  getCommissionInstallmentAmount,
+  getCommissionPaymentInstallment,
+  type CommissionInstallment,
+} from "../lib/commission-payment"
 
 export type CompleteCommissionPaymentInput = {
   session_id: string
@@ -185,6 +190,71 @@ export const resolveCommissionOrderPaymentContextStep = createStep(
       )
     }
 
+    const sessionData = (session.data ?? {}) as Record<string, any>
+    const alreadyPaid = assertCommissionPaymentCompletion(
+      commission,
+      input.razorpay_payment_id
+    )
+    const replayInstallment: CommissionInstallment | null =
+      commission.deposit_payment_reference === input.razorpay_payment_id
+        ? "deposit"
+        : commission.final_payment_reference === input.razorpay_payment_id ||
+            commission.payment_reference === input.razorpay_payment_id
+          ? "balance"
+          : null
+    const installment: CommissionInstallment | null =
+      sessionData.commission_installment ||
+      getCommissionPaymentInstallment(commission.status) ||
+      replayInstallment
+
+    if (installment !== "deposit" && installment !== "balance") {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "No installment is currently payable for this commission."
+      )
+    }
+
+    const isLegacyFullPayment =
+      alreadyPaid &&
+      commission.status === "paid" &&
+      !commission.final_payment_reference &&
+      commission.payment_reference === input.razorpay_payment_id
+    const expectedAmount = getCommissionInstallmentAmount(
+      commission.quoted_price,
+      installment
+    )
+    if (
+      !isLegacyFullPayment &&
+      Number(sessionData.amount) !== expectedAmount * 100
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Razorpay payment amount does not match the commission installment."
+      )
+    }
+
+    const activeInstallment = getCommissionPaymentInstallment(commission.status)
+    if (
+      !replayInstallment &&
+      activeInstallment !== installment
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "This payment session is not for the currently due commission installment."
+      )
+    }
+
+    if (
+      installment === "balance" &&
+      !commission.final_payment_requested_at &&
+      !isLegacyFullPayment
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "The studio has not requested the final payment yet."
+      )
+    }
+
     const storedRazorpayOrderId = (session.data as Record<string, any> | undefined)
       ?.razorpay_order_id
     if (
@@ -199,10 +269,6 @@ export const resolveCommissionOrderPaymentContextStep = createStep(
     }
 
     // 5. Check if already paid
-    const alreadyPaid = assertCommissionPaymentCompletion(
-      commission,
-      input.razorpay_payment_id
-    )
     if (alreadyPaid) {
       logger.info(
         `[complete-commission-payment] Commission ${commission.id} is already paid. Skipping double execution.`
@@ -212,6 +278,7 @@ export const resolveCommissionOrderPaymentContextStep = createStep(
         session,
         order,
         commission,
+        installment,
       })
     }
 
@@ -220,6 +287,7 @@ export const resolveCommissionOrderPaymentContextStep = createStep(
       session,
       order,
       commission,
+      installment,
     })
   }
 )
@@ -254,6 +322,15 @@ const revalidateCommissionPaymentContextStep = createStep(
       commission,
       payment_reference
     )
+    if (
+      !alreadyPaid &&
+      getCommissionPaymentInstallment(commission.status) !== context.installment
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Commission installment changed while payment was being prepared."
+      )
+    }
     return new StepResponse({
       ...context,
       commission,
@@ -290,6 +367,7 @@ export const authorizeAndCaptureCommissionStep = createStep(
         ? { razorpay_signature: input.razorpay_signature }
         : {}),
       ...(input.webhook_verified ? { webhook_verified: true } : {}),
+      commission_installment: context.installment,
     }
 
     await paymentModule.updatePaymentSession({
@@ -373,10 +451,10 @@ export const convertCommissionDraftOrderToPendingStep = createStep(
 
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
 
-    if (
+    if (context.installment === "deposit" && (
       context.order.is_draft_order ||
       context.order.status === OrderStatus.DRAFT
-    ) {
+    )) {
       try {
         const { result: convertedOrder } = await convertDraftOrderWorkflow(
           container
@@ -395,6 +473,14 @@ export const convertCommissionDraftOrderToPendingStep = createStep(
       }
     }
 
+    if (
+      context.installment === "balance" &&
+      !context.order.is_draft_order &&
+      context.order.status !== OrderStatus.DRAFT
+    ) {
+      return new StepResponse(context.order)
+    }
+
     throw new MedusaError(
       MedusaError.Types.UNEXPECTED_STATE,
       `Order ${context.order.id} is not a draft order and cannot be completed as a commission payment.`
@@ -405,6 +491,7 @@ export const convertCommissionDraftOrderToPendingStep = createStep(
 /* ---------------- STEP 4: Mark Commission as Paid & Emit Events ---------------- */
 
 type MarkPaidInput = {
+  context: any
   commission_id: string
   payment_reference: string
   authorization: { paymentId: string }
@@ -414,10 +501,16 @@ type MarkPaidInput = {
 export const markCommissionPaidStep = createStep(
   "mark-commission-paid",
   async (
-    { commission_id, payment_reference, authorization, order }: MarkPaidInput,
+    { context, commission_id, payment_reference, authorization, order }: MarkPaidInput,
     { container }
   ) => {
-    if (!authorization.paymentId || order.is_draft_order || order.status === OrderStatus.DRAFT) {
+    if (
+      !authorization.paymentId ||
+      (context.installment === "deposit" &&
+        (order.is_draft_order || order.status === OrderStatus.DRAFT)) ||
+      (context.installment === "balance" &&
+        (order.is_draft_order || order.status === OrderStatus.DRAFT))
+    ) {
       throw new MedusaError(
         MedusaError.Types.UNEXPECTED_STATE,
         "Commission payment cannot be marked paid before verified payment capture and order conversion."
@@ -433,7 +526,10 @@ export const markCommissionPaidStep = createStep(
       )
     }
     if (commission.status === "paid" && commission.paid_at) {
-      if (commission.payment_reference !== payment_reference) {
+      if (
+        commission.payment_reference !== payment_reference &&
+        commission.final_payment_reference !== payment_reference
+      ) {
         throw new MedusaError(
           MedusaError.Types.CONFLICT,
           "Commission was already paid with a different Razorpay payment."
@@ -441,18 +537,40 @@ export const markCommissionPaidStep = createStep(
       }
       return new StepResponse(commission)
     }
+    if (
+      commission.status === "in_production" &&
+      commission.deposit_payment_reference === payment_reference
+    ) {
+      return new StepResponse(commission)
+    }
+
+    const nextStatus: CommissionStatus =
+      context.installment === "deposit" ? "in_production" : "paid"
     assertCommissionTransition(
       commission.status as CommissionStatus,
-      "paid"
+      nextStatus
     )
 
-    const updated = await commissionService.updateCommissions({
-      id: commission_id,
-      status: "paid",
-      paid_at: new Date(),
-      payment_reference,
-      admin_notes: `Payment confirmed via Razorpay (${payment_reference})`,
-    })
+    const now = new Date()
+    const updated = await commissionService.updateCommissions(
+      context.installment === "deposit"
+        ? {
+            id: commission_id,
+            status: nextStatus,
+            deposit_paid_at: now,
+            deposit_payment_reference: payment_reference,
+            admin_notes: `50% deposit confirmed via Razorpay (${payment_reference})`,
+          }
+        : {
+            id: commission_id,
+            status: nextStatus,
+            paid_at: now,
+            payment_reference,
+            final_paid_at: now,
+            final_payment_reference: payment_reference,
+            admin_notes: `Final commission installment confirmed via Razorpay (${payment_reference})`,
+          }
+    )
 
     await emitCommissionStatusChanged(
       container,
@@ -474,6 +592,11 @@ export const markCommissionPaidStep = createStep(
           order_id: updated.order_id,
           payment_reference,
           paid_at: updated.paid_at,
+          installment: context.installment,
+          installment_amount: getCommissionInstallmentAmount(
+            updated.quoted_price,
+            context.installment
+          ),
         },
       })
     } catch (error) {
@@ -507,6 +630,7 @@ export const completeCommissionPaymentWorkflow = createWorkflow(
       authorization,
     })
     const paidCommission = markCommissionPaidStep({
+      context,
       commission_id: context.commission.id,
       payment_reference: input.razorpay_payment_id,
       authorization,
