@@ -409,7 +409,8 @@ export async function getOrder(
 ): Promise<HttpTypes.StoreOrder | null> {
   try {
     const { order } = await sdk.store.order.retrieve(id, {
-      fields: "*items,*items.variant,*items.product,*shipping_address,*shipping_methods",
+      fields:
+        "*items,*items.variant,*items.product,*shipping_address,*shipping_methods,payment_status,fulfillment_status,fulfillments",
     });
     return order;
   } catch {

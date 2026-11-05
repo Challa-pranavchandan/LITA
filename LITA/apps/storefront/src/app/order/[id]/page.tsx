@@ -7,6 +7,8 @@ import { OrderTotals } from "@/components/CartLines";
 import { formatMoney } from "@/lib/format";
 import { getUpiPayment } from "@/lib/data/upi";
 import { UpiPayPanel } from "@/components/upi/UpiPayPanel";
+import { getOrderTracking } from "@/lib/data/order-tracking";
+import { LiveOrderStatus } from "@/components/LiveOrderStatus";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Order placed", robots: { index: false } };
@@ -21,9 +23,10 @@ export default async function OrderPage({
   const { id } = await params;
   const order = await getOrder(id);
   if (!order) notFound();
-  const [{ pay }, upiResult] = await Promise.all([
+  const [{ pay }, upiResult, trackingResult] = await Promise.all([
     searchParams,
     getUpiPayment(id),
+    getOrderTracking(id),
   ]);
   const showUpiPanel = pay === "upi" || Boolean(upiResult.payment);
   const a = order.shipping_address;
@@ -34,6 +37,15 @@ export default async function OrderPage({
       <p className="mt-2 text-graphite">
         Order number {order.display_id ? `#${order.display_id}` : order.id}. A confirmation will be sent to {order.email}.
       </p>
+
+      <LiveOrderStatus
+        orderId={id}
+        initialStatus={order.status}
+        initialPaymentStatus={order.payment_status}
+        initialFulfillmentStatus={order.fulfillment_status}
+        initialTracking={trackingResult.fulfillments}
+        initialTrackingError={trackingResult.error ?? null}
+      />
 
       {showUpiPanel && upiResult.payment && (
         <UpiPayPanel orderId={id} initialPayment={upiResult.payment} />

@@ -116,7 +116,11 @@ export async function listOrders(): Promise<HttpTypes.StoreOrder[]> {
   if (!headers.authorization) return [];
   try {
     const { orders } = await sdk.store.order.list(
-      { limit: 50, order: "-created_at", fields: "*items" },
+      {
+        limit: 50,
+        order: "-created_at",
+        fields: "*items,payment_status,fulfillment_status",
+      },
       headers
     );
     return orders;

@@ -669,7 +669,8 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Magic link checkout (Option C)
 - [ ] Trade customer group and discount pricing
 - [ ] Playwright end-to-end suite and HTTP integration tests
-- [ ] Invoice PDF and order tracking page
+- [ ] Invoice PDF
+- [x] Order tracking page with live order/payment/fulfillment status and shipment tracking links
 
 ---
 

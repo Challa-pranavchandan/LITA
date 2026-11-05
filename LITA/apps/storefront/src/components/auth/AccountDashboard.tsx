@@ -28,6 +28,7 @@ import {
 } from "@/lib/followed-artists";
 import CommissionPayButton from "@/components/commission/CommissionPayButton";
 import { AcceptCommissionQuoteButton } from "@/components/commission/AcceptCommissionQuoteButton";
+import { getCustomerOrderStatus } from "@/lib/order-status";
 
 interface AccountDashboardProps {
   customer: HttpTypes.StoreCustomer;
@@ -440,7 +441,11 @@ export function AccountDashboard({
                           </span>
                           {o.status && (
                             <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 bg-[#f4f4f4] text-[#6b6b6b]">
-                              {o.status}
+                              {getCustomerOrderStatus({
+                                orderStatus: o.status,
+                                paymentStatus: o.payment_status,
+                                fulfillmentStatus: o.fulfillment_status,
+                              })}
                             </span>
                           )}
                         </div>
@@ -750,7 +755,7 @@ export function AccountDashboard({
 
             <div className="divide-y divide-[#eeeeee]">
               {commissions.map((c) => {
-                const canPay = c.status === "awaiting_payment" || c.status === "converted";
+                const canPay = c.status === "awaiting_payment";
                 const hasQuote = c.status === "quoted" && Boolean(c.quoted_price);
                 const isPaid = c.status === "paid" || !!c.paid_at;
 

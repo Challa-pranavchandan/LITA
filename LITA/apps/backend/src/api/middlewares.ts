@@ -193,6 +193,16 @@ export default defineMiddlewares({
       ],
     },
     {
+      matcher: "/store/orders/:order_id/tracking",
+      method: "GET",
+      middlewares: [
+        authenticate("customer", ["bearer", "session"], {
+          allowUnauthenticated: true,
+        }),
+        createRateLimitMiddleware("order_tracking_lookup", 120, 15 * 60 * 1000),
+      ],
+    },
+    {
       matcher: "/store/upi-payments/:reference/upload-url",
       method: "POST",
       middlewares: [

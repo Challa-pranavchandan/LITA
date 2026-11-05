@@ -23,6 +23,7 @@ export type RateLimitAction =
   | "upi_proof"
   | "upi_upload"
   | "upi_lookup"
+  | "order_tracking_lookup"
 
 export function checkBackendRateLimit(
   key: string,

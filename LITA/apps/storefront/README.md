@@ -23,7 +23,7 @@ You need a running Medusa v2 backend (default `http://localhost:9000`) and a pub
 | `/saved` | Works saved with the heart (stored in the browser) |
 | `/cart`, bag drawer | Quantities, remove, discount codes, totals |
 | `/checkout` | Address, delivery, payment, place order |
-| `/order/[id]` | Confirmation |
+| `/order/[id]` | Confirmation, order status, and live shipment tracking |
 | `/account` | Sign in, register, order history |
 | `/exhibitions` | Current, upcoming, and past exhibitions managed from the Medusa admin |
 | `/commissions` | Bespoke commission form and charcoal portrait option |
