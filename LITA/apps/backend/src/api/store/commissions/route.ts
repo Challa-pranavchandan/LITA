@@ -1,8 +1,12 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { COMMISSION_MODULE } from "../../../modules/commission"
 import CommissionModuleService from "../../../modules/commission/service"
-import { getPresignedDownloadUrl } from "../../../lib/r2"
+import {
+  getCommissionImageMetadata,
+  getPresignedPrivateDownloadUrl,
+} from "../../../lib/r2"
 import { getCharcoalPortraitPrice } from "../../../lib/charcoal-portrait-pricing"
+import { emitCommissionStatusChanged } from "../../../lib/commission-status"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const customerId = (req as any).auth_context?.actor_id
@@ -20,15 +24,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     deadline,
     images,
     charcoal_portrait,
-  } = (req.body as any) || {}
-
-  if (!title || typeof title !== "string" || !title.trim()) {
-    return res.status(400).json({ message: "Commission title is required." })
-  }
-
-  if (!idea || typeof idea !== "string" || !idea.trim()) {
-    return res.status(400).json({ message: "Description/idea of the artwork is required." })
-  }
+  } = req.body as any
 
   let fixedPortraitPrice: number | null = null
   if (charcoal_portrait !== undefined) {
@@ -45,20 +41,36 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   // Security validation: ensure all reference image keys belong to this customer
   const validatedImages: Array<{ key: string; filename: string; mime: string; size: number }> = []
-  if (Array.isArray(images)) {
+  if (images) {
     const expectedPrefix = `commissions/${customerId}/`
-    for (const img of images) {
-      if (!img.key || typeof img.key !== "string" || !img.key.startsWith(expectedPrefix)) {
+    for (const image of images) {
+      if (!image.key.startsWith(expectedPrefix)) {
         return res.status(400).json({
-          message: "Security violation: Invalid or unauthorized image key path.",
+          message: "Reference images must belong to the signed-in customer.",
         })
       }
-      validatedImages.push({
-        key: img.key,
-        filename: String(img.filename || "reference"),
-        mime: String(img.mime || "image/jpeg"),
-        size: Number(img.size || 0),
-      })
+
+      let actual: Awaited<ReturnType<typeof getCommissionImageMetadata>>
+      try {
+        actual = await getCommissionImageMetadata(image.key)
+      } catch (error: any) {
+        if (error?.name === "NotFound" || error?.name === "NoSuchKey") {
+          return res.status(400).json({
+            message: `Reference image '${image.filename}' has not finished uploading.`,
+          })
+        }
+        throw error
+      }
+      if (
+        actual.contentLength !== image.size ||
+        actual.contentType !== image.mime ||
+        actual.imageMime !== image.mime
+      ) {
+        return res.status(400).json({
+          message: `Reference image '${image.filename}' does not match the uploaded image type or size.`,
+        })
+      }
+      validatedImages.push(image)
     }
   }
 
@@ -90,9 +102,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     status: fixedPortraitPrice === null ? "new" : "quoted",
     quoted_price: fixedPortraitPrice,
     currency_code: "inr",
-    images: validatedImages as any,
+    images: validatedImages as unknown as Record<string, unknown>,
   })
 
+  await emitCommissionStatusChanged(req.scope, null, created)
   return res.status(201).json({ commission: created })
 }
 
@@ -114,14 +127,10 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     commissions.map(async (com) => {
       if (Array.isArray(com.images)) {
         const imagesWithUrls = await Promise.all(
-          com.images.map(async (img: any) => {
-            try {
-              const url = await getPresignedDownloadUrl(img.key, 900)
-              return { ...img, url }
-            } catch {
-              return img
-            }
-          })
+          com.images.map(async (img: any) => ({
+            ...img,
+            url: await getPresignedPrivateDownloadUrl(img.key, 900),
+          }))
         )
         return { ...com, images: imagesWithUrls as any }
       }

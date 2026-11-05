@@ -13,6 +13,8 @@ export type RateLimitAction =
   | "trade"
   | "feedback"
   | "commission_upload"
+  | "commission_create"
+  | "commission_message"
   | "commission_pay_session"
   | "commission_pay"
   | "wishlist"

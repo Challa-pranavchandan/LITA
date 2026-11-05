@@ -2,13 +2,18 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 import { COMMISSION_MODULE } from "../../../modules/commission"
 import CommissionModuleService from "../../../modules/commission/service"
-import { getPresignedDownloadUrl } from "../../../lib/r2"
+import { getPresignedPrivateDownloadUrl } from "../../../lib/r2"
+import { CommissionListQuerySchema } from "../../schemas/commission"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const commissionService: CommissionModuleService = req.scope.resolve(COMMISSION_MODULE)
   const customerService: any = req.scope.resolve(Modules.CUSTOMER)
 
-  const { status, q, limit = 50, offset = 0 } = (req.query as any) || {}
+  const parsedQuery = CommissionListQuerySchema.safeParse(req.query)
+  if (!parsedQuery.success) {
+    return res.status(400).json({ message: "Invalid commission list filters." })
+  }
+  const { status, q, limit = 50, offset = 0 } = parsedQuery.data
 
   const filters: any = {}
   if (status && status !== "all") {
@@ -48,14 +53,10 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       let imagesWithUrls: any = com.images
       if (Array.isArray(com.images)) {
         imagesWithUrls = await Promise.all(
-          com.images.map(async (img: any) => {
-            try {
-              const url = await getPresignedDownloadUrl(img.key, 900)
-              return { ...img, url }
-            } catch {
-              return img
-            }
-          })
+          com.images.map(async (img: any) => ({
+            ...img,
+            url: await getPresignedPrivateDownloadUrl(img.key, 900),
+          }))
         )
       }
 

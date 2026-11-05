@@ -1,12 +1,18 @@
 import { createContainer, asValue } from "awilix"
 import { POST } from "../route"
 import { COMMISSION_MODULE } from "../../../../modules/commission"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 
 describe("POST /store/commissions charcoal portrait pricing", () => {
   function makeRequest(body: Record<string, unknown>, commissionService: any) {
     const scope = createContainer()
     scope.register({
       [COMMISSION_MODULE]: asValue(commissionService),
+      [ContainerRegistrationKeys.LOGGER]: asValue({
+        error: jest.fn(),
+        warn: jest.fn(),
+      }),
+      [Modules.EVENT_BUS]: asValue({ emit: jest.fn().mockResolvedValue(undefined) }),
     })
 
     return {

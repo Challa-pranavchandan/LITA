@@ -25,8 +25,9 @@ export default async function commissionStatusChangedHandler({
     return
   }
 
-  // Only dispatch for notable customer-facing statuses
-  const notifiedStatuses = [
+  const commissionStatuses = [
+    "new",
+    "in_discussion",
     "quoted",
     "accepted",
     "awaiting_payment",
@@ -36,10 +37,8 @@ export default async function commissionStatusChangedHandler({
     "cancelled",
   ]
   const normalizedStatus = data.status.toLowerCase().trim()
-  if (!notifiedStatuses.includes(normalizedStatus)) {
-    logger.debug(
-      `[commission-status-changed] Status '${data.status}' does not trigger email notification. Skipping.`
-    )
+  if (!commissionStatuses.includes(normalizedStatus)) {
+    logger.warn(`[commission-status-changed] Unsupported status '${data.status}'.`)
     return
   }
 
@@ -91,6 +90,7 @@ export default async function commissionStatusChangedHandler({
       [customer.first_name, customer.last_name].filter(Boolean).join(" ") || undefined
 
     const templateData = {
+      commissionId: data.id,
       title: data.title || "Bespoke Artwork",
       customerName,
       status: normalizedStatus,

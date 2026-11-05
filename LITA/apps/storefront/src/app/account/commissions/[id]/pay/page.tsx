@@ -6,6 +6,7 @@ import { getCustomerCommission } from "@/lib/data/commission";
 import { formatMoney } from "@/lib/format";
 import CommissionPayButton from "@/components/commission/CommissionPayButton";
 import { AcceptCommissionQuoteButton } from "@/components/commission/AcceptCommissionQuoteButton";
+import { CustomerCommissionDiscussion } from "@/components/commission/CustomerCommissionDiscussion";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +32,7 @@ export default async function CommissionPayPage(props: {
 
   const commission = detail.commission;
   const isPaid = commission.status === "paid" || !!commission.paid_at;
-  const canPay =
-    commission.status === "awaiting_payment" || commission.status === "converted";
+  const canPay = commission.status === "awaiting_payment";
 
   return (
     <div className="bg-white min-h-[calc(100vh-var(--header-h)-120px)] py-12 md:py-20 px-6 md:px-12">
@@ -62,6 +62,11 @@ export default async function CommissionPayPage(props: {
           </h1>
         </div>
 
+        <CustomerCommissionDiscussion
+          commissionId={commission.id}
+          initialMessages={detail.messages}
+        />
+
         {/* Two-Column Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
           {/* Left Column: Commission Specifications */}
@@ -85,6 +90,33 @@ export default async function CommissionPayPage(props: {
                 </p>
               </div>
             )}
+
+            {commission.images?.length ? (
+              <div>
+                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                  Reference Images
+                </h2>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {commission.images.map((image) =>
+                    image.url ? (
+                      <a
+                        key={image.key}
+                        href={image.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden border border-neutral-200"
+                      >
+                        <img
+                          src={image.url}
+                          alt={image.filename}
+                          className="aspect-square w-full object-cover"
+                        />
+                      </a>
+                    ) : null
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-4 border-t border-neutral-200 pt-6">
               <div>

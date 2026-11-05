@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto"
 import {
   createStep,
   createWorkflow,
@@ -17,6 +18,12 @@ import {
 } from "@medusajs/core-flows"
 import { COMMISSION_MODULE } from "../modules/commission"
 import CommissionModuleService from "../modules/commission/service"
+import {
+  assertCommissionPaymentCompletion,
+  assertCommissionTransition,
+  emitCommissionStatusChanged,
+  type CommissionStatus,
+} from "../lib/commission-status"
 
 export type CompleteCommissionPaymentInput = {
   session_id: string
@@ -27,11 +34,80 @@ export type CompleteCommissionPaymentInput = {
   commission_id?: string
 }
 
+type CommissionPaymentLockingService = {
+  acquire: (key: string, args?: { ownerId?: string; expire?: number }) => Promise<void>
+  release: (key: string, args?: { ownerId?: string }) => Promise<boolean>
+}
+
+type LockedPaymentInput = CompleteCommissionPaymentInput & {
+  payment_lock?: { commission_id: string; owner_id: string }
+}
+
+const acquireCommissionPaymentLockStep = createStep(
+  "acquire-commission-payment-lock",
+  async (
+    input: { commission_id: string },
+    { container }
+  ): Promise<
+    StepResponse<
+      { commission_id: string; owner_id: string },
+      { commission_id: string; owner_id: string }
+    >
+  > => {
+    const locking = container.resolve<CommissionPaymentLockingService>(Modules.LOCKING)
+    const ownerId = randomUUID()
+    await locking.acquire(`commission_payment:${input.commission_id}`, {
+      ownerId,
+      expire: 900,
+    })
+    return new StepResponse(
+      { commission_id: input.commission_id, owner_id: ownerId },
+      { commission_id: input.commission_id, owner_id: ownerId }
+    )
+  },
+  async (lock, { container }) => {
+    if (!lock) return
+    const locking = container.resolve<CommissionPaymentLockingService>(Modules.LOCKING)
+    await locking.release(`commission_payment:${lock.commission_id}`, {
+      ownerId: lock.owner_id,
+    })
+  }
+)
+
+const releaseCommissionPaymentLockStep = createStep(
+  "release-commission-payment-lock",
+  async (
+    input: {
+      commission_id: string
+      owner_id: string
+      commission: any
+      order: any
+    },
+    { container }
+  ) => {
+    const locking = container.resolve<CommissionPaymentLockingService>(Modules.LOCKING)
+    const released = await locking.release(
+      `commission_payment:${input.commission_id}`,
+      { ownerId: input.owner_id }
+    )
+    if (!released) {
+      const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
+      logger.warn(
+        `[commissions] Payment lock for ${input.commission_id} expired or was not owned by this workflow.`
+      )
+    }
+    return new StepResponse({
+      commission: input.commission,
+      order: input.order,
+    })
+  }
+)
+
 /* ---------------- STEP 1: Resolve Context ---------------- */
 
 export const resolveCommissionOrderPaymentContextStep = createStep(
   "resolve-commission-order-payment-context",
-  async (input: CompleteCommissionPaymentInput, { container }) => {
+  async (input: LockedPaymentInput, { container }) => {
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
     const query: any = container.resolve(ContainerRegistrationKeys.QUERY)
     const commissionService: CommissionModuleService =
@@ -102,8 +178,32 @@ export const resolveCommissionOrderPaymentContextStep = createStep(
       )
     }
 
+    if (commission.order_id !== orderId) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Payment session is not linked to this commission."
+      )
+    }
+
+    const storedRazorpayOrderId = (session.data as Record<string, any> | undefined)
+      ?.razorpay_order_id
+    if (
+      (input.razorpay_order_id &&
+        storedRazorpayOrderId !== input.razorpay_order_id) ||
+      (!input.webhook_verified && !storedRazorpayOrderId)
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Razorpay order does not match the commission payment session."
+      )
+    }
+
     // 5. Check if already paid
-    if (commission.status === "paid" && commission.paid_at) {
+    const alreadyPaid = assertCommissionPaymentCompletion(
+      commission,
+      input.razorpay_payment_id
+    )
+    if (alreadyPaid) {
       logger.info(
         `[complete-commission-payment] Commission ${commission.id} is already paid. Skipping double execution.`
       )
@@ -120,6 +220,44 @@ export const resolveCommissionOrderPaymentContextStep = createStep(
       session,
       order,
       commission,
+    })
+  }
+)
+
+const revalidateCommissionPaymentContextStep = createStep(
+  "revalidate-commission-payment-context",
+  async (
+    {
+      context,
+      payment_lock,
+      payment_reference,
+    }: {
+      context: any
+      payment_lock: { commission_id: string; owner_id: string }
+      payment_reference: string
+    },
+    { container }
+  ) => {
+    const commissionService: CommissionModuleService =
+      container.resolve(COMMISSION_MODULE)
+    const commission = await commissionService.retrieveCommission(
+      payment_lock.commission_id
+    )
+    if (!commission || commission.order_id !== context.order.id) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Commission changed while payment was being prepared."
+      )
+    }
+
+    const alreadyPaid = assertCommissionPaymentCompletion(
+      commission,
+      payment_reference
+    )
+    return new StepResponse({
+      ...context,
+      commission,
+      alreadyPaid,
     })
   }
 )
@@ -218,7 +356,17 @@ export const authorizeAndCaptureCommissionStep = createStep(
 
 export const convertCommissionDraftOrderToPendingStep = createStep(
   "convert-commission-draft-order-to-pending",
-  async (context: any, { container }) => {
+  async (
+    { context, authorization }: { context: any; authorization: { paymentId: string } },
+    { container }
+  ) => {
+    if (!authorization.paymentId) {
+      throw new MedusaError(
+        MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
+        "Commission payment has not been authorized and captured."
+      )
+    }
+
     if (context.alreadyPaid) {
       return new StepResponse(context.order)
     }
@@ -243,10 +391,14 @@ export const convertCommissionDraftOrderToPendingStep = createStep(
         logger.error(
           `[complete-commission-payment] Failed to convert draft order ${context.order.id}: ${err?.message}`
         )
+        throw err
       }
     }
 
-    return new StepResponse(context.order)
+    throw new MedusaError(
+      MedusaError.Types.UNEXPECTED_STATE,
+      `Order ${context.order.id} is not a draft order and cannot be completed as a commission payment.`
+    )
   }
 )
 
@@ -255,13 +407,44 @@ export const convertCommissionDraftOrderToPendingStep = createStep(
 type MarkPaidInput = {
   commission_id: string
   payment_reference: string
+  authorization: { paymentId: string }
+  order: any
 }
 
 export const markCommissionPaidStep = createStep(
   "mark-commission-paid",
-  async ({ commission_id, payment_reference }: MarkPaidInput, { container }) => {
+  async (
+    { commission_id, payment_reference, authorization, order }: MarkPaidInput,
+    { container }
+  ) => {
+    if (!authorization.paymentId || order.is_draft_order || order.status === OrderStatus.DRAFT) {
+      throw new MedusaError(
+        MedusaError.Types.UNEXPECTED_STATE,
+        "Commission payment cannot be marked paid before verified payment capture and order conversion."
+      )
+    }
     const commissionService: CommissionModuleService =
       container.resolve(COMMISSION_MODULE)
+    const commission = await commissionService.retrieveCommission(commission_id)
+    if (!commission) {
+      throw new MedusaError(
+        MedusaError.Types.NOT_FOUND,
+        `Commission ${commission_id} was not found.`
+      )
+    }
+    if (commission.status === "paid" && commission.paid_at) {
+      if (commission.payment_reference !== payment_reference) {
+        throw new MedusaError(
+          MedusaError.Types.CONFLICT,
+          "Commission was already paid with a different Razorpay payment."
+        )
+      }
+      return new StepResponse(commission)
+    }
+    assertCommissionTransition(
+      commission.status as CommissionStatus,
+      "paid"
+    )
 
     const updated = await commissionService.updateCommissions({
       id: commission_id,
@@ -271,42 +454,35 @@ export const markCommissionPaidStep = createStep(
       admin_notes: `Payment confirmed via Razorpay (${payment_reference})`,
     })
 
+    await emitCommissionStatusChanged(
+      container,
+      commission.status as CommissionStatus,
+      updated
+    )
+
+    const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
     try {
       const eventBus: any = container.resolve(Modules.EVENT_BUS)
-      if (eventBus) {
-        await eventBus.emit({
-          name: "commission.status_changed",
-          data: {
-            id: updated.id,
-            customer_id: updated.customer_id,
-            title: updated.title,
-            status: "paid",
-            previous_status: "awaiting_payment",
-            quoted_price: updated.quoted_price,
-            currency_code: updated.currency_code,
-            order_id: updated.order_id,
-            payment_reference,
-          },
-        })
-
-        await eventBus.emit({
-          name: "commission.payment_received",
-          data: {
-            id: updated.id,
-            customer_id: updated.customer_id,
-            title: updated.title,
-            quoted_price: updated.quoted_price,
-            currency_code: updated.currency_code,
-            order_id: updated.order_id,
-            payment_reference,
-            paid_at: updated.paid_at,
-          },
-        })
-      }
-    } catch (err: any) {
-      console.warn(`[commissions] Failed to emit payment received events: ${err?.message}`)
+      await eventBus.emit({
+        name: "commission.payment_received",
+        data: {
+          id: updated.id,
+          customer_id: updated.customer_id,
+          title: updated.title,
+          quoted_price: updated.quoted_price,
+          currency_code: updated.currency_code,
+          order_id: updated.order_id,
+          payment_reference,
+          paid_at: updated.paid_at,
+        },
+      })
+    } catch (error) {
+      logger.error(
+        `[commissions] Failed to emit payment received event: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
     }
-
     return new StepResponse(updated)
   }
 )
@@ -316,17 +492,36 @@ export const markCommissionPaidStep = createStep(
 export const completeCommissionPaymentWorkflow = createWorkflow(
   "complete-commission-payment",
   (input: CompleteCommissionPaymentInput) => {
-    const context = resolveCommissionOrderPaymentContextStep(input)
-    authorizeAndCaptureCommissionStep({ context, input })
-    const finalOrder = convertCommissionDraftOrderToPendingStep(context)
+    const initialContext = resolveCommissionOrderPaymentContextStep(input)
+    const lock = acquireCommissionPaymentLockStep({
+      commission_id: initialContext.commission.id,
+    })
+    const context = revalidateCommissionPaymentContextStep({
+      context: initialContext,
+      payment_lock: lock,
+      payment_reference: input.razorpay_payment_id,
+    })
+    const authorization = authorizeAndCaptureCommissionStep({ context, input })
+    const finalOrder = convertCommissionDraftOrderToPendingStep({
+      context,
+      authorization,
+    })
     const paidCommission = markCommissionPaidStep({
       commission_id: context.commission.id,
       payment_reference: input.razorpay_payment_id,
+      authorization,
+      order: finalOrder,
+    })
+    const result = releaseCommissionPaymentLockStep({
+      commission_id: context.commission.id,
+      owner_id: lock.owner_id,
+      commission: paidCommission,
+      order: finalOrder,
     })
 
     return new WorkflowResponse({
-      commission: paidCommission,
-      order: finalOrder,
+      commission: result.commission,
+      order: result.order,
     })
   }
 )

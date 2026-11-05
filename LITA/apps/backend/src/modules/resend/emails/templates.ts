@@ -335,9 +335,10 @@ export function tradeApplicationStatusTemplate(data: TradeStatusTemplateData): {
    4. Commission Status Changed
    ========================================================================== */
 export interface CommissionStatusTemplateData {
+  commissionId?: string
   title: string
   customerName?: string
-  status: "quoted" | "accepted" | "converted" | "rejected" | "cancelled" | string
+  status: string
   quotedPrice?: number
   currencyCode?: string
   adminNotes?: string
@@ -349,7 +350,9 @@ export function commissionStatusTemplate(data: CommissionStatusTemplateData): {
   subject: string
   html: string
 } {
-  const commissionsUrl = `${data.storefrontUrl}/account/commissions`
+  const commissionsUrl = data.commissionId
+    ? `${data.storefrontUrl}/account/commissions/${encodeURIComponent(data.commissionId)}/pay`
+    : `${data.storefrontUrl}/account`
   const currency = data.currencyCode || "inr"
 
   let subject = `Update on your Commission "${data.title}" — Livin In The Art`
@@ -357,6 +360,21 @@ export function commissionStatusTemplate(data: CommissionStatusTemplateData): {
   let bodyContent = ""
 
   switch (data.status) {
+    case "new":
+    case "in_discussion": {
+      subject = `Commission Request Received: "${data.title}" — Livin In The Art`
+      headerText = data.status === "new" ? "Request Received" : "Studio Discussion Started"
+      bodyContent = `
+        <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #555555;">
+          ${data.customerName ? `Dear ${escapeHtml(data.customerName)}, ` : ""}Your commission request <strong>"${escapeHtml(data.title)}"</strong> is ${data.status === "new" ? "in the studio's review queue" : "now in discussion with the studio"}.
+        </p>
+        <div style="margin: 28px 0; text-align: left;">
+          <a href="${commissionsUrl}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">
+            View Commission Details
+          </a>
+        </div>`
+      break
+    }
     case "quoted": {
       subject = `Quote Ready: "${data.title}" — Livin In The Art`
       headerText = "Commission Quote Received"

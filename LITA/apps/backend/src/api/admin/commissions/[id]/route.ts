@@ -2,10 +2,20 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 import { COMMISSION_MODULE } from "../../../../modules/commission"
 import CommissionModuleService from "../../../../modules/commission/service"
-import { getPresignedDownloadUrl } from "../../../../lib/r2"
+import { getPresignedPrivateDownloadUrl } from "../../../../lib/r2"
+import {
+  assertCommissionTransition,
+  emitCommissionStatusChanged,
+  type CommissionStatus,
+} from "../../../../lib/commission-status"
+import { CommissionIdSchema } from "../../../schemas/commission"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
-  const { id } = req.params
+  const parsedId = CommissionIdSchema.safeParse(req.params.id)
+  if (!parsedId.success) {
+    return res.status(400).json({ message: "Invalid commission ID." })
+  }
+  const id = parsedId.data
   const commissionService: CommissionModuleService = req.scope.resolve(COMMISSION_MODULE)
   const customerService: any = req.scope.resolve(Modules.CUSTOMER)
 
@@ -25,33 +35,33 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   // Retrieve message negotiation history
   const [messages] = await commissionService.listAndCountCommissionMessages(
     { commission_id: id },
-    { order: { created_at: "ASC" }, take: 100 }
+    { order: { created_at: "DESC" }, take: 100 }
   )
 
   // Attach presigned download URLs for images
   let imagesWithUrls: any = commission.images
   if (Array.isArray(commission.images)) {
     imagesWithUrls = await Promise.all(
-      commission.images.map(async (img: any) => {
-        try {
-          const url = await getPresignedDownloadUrl(img.key, 900)
-          return { ...img, url }
-        } catch {
-          return img
-        }
-      })
+      commission.images.map(async (img: any) => ({
+        ...img,
+        url: await getPresignedPrivateDownloadUrl(img.key, 900),
+      }))
     )
   }
 
   return res.status(200).json({
     commission: { ...commission, images: imagesWithUrls as any },
     customer,
-    messages,
+    messages: messages.reverse(),
   })
 }
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
-  const { id } = req.params
+  const parsedId = CommissionIdSchema.safeParse(req.params.id)
+  if (!parsedId.success) {
+    return res.status(400).json({ message: "Invalid commission ID." })
+  }
+  const id = parsedId.data
   const commissionService: CommissionModuleService = req.scope.resolve(COMMISSION_MODULE)
 
   const existing = await commissionService.retrieveCommission(id)
@@ -59,38 +69,55 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     return res.status(404).json({ message: "Commission not found." })
   }
 
-  const { status, quoted_price, currency_code, admin_notes } = (req.body as any) || {}
+  const { status, quoted_price, currency_code, admin_notes } = req.body as any
 
   const updatePayload: any = { id }
 
   if (status !== undefined) {
-    const validStatuses = [
-      "new",
-      "in_discussion",
-      "quoted",
-      "accepted",
-      "converted",
-      "rejected",
-      "cancelled",
-    ]
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({
-        message: `Invalid status '${status}'. Must be one of: ${validStatuses.join(", ")}`,
-      })
+    if (status !== existing.status) {
+      try {
+        assertCommissionTransition(
+          existing.status as CommissionStatus,
+          status as CommissionStatus
+        )
+      } catch (error: any) {
+        return res.status(400).json({ message: error.message })
+      }
     }
     updatePayload.status = status
   }
 
   if (quoted_price !== undefined) {
-    const numPrice = Number(quoted_price)
-    if (isNaN(numPrice) || numPrice < 0) {
-      return res.status(400).json({ message: "Quoted price must be a valid positive number." })
+    if (
+      ["accepted", "awaiting_payment", "paid"].includes(existing.status) &&
+      quoted_price !== existing.quoted_price
+    ) {
+      return res.status(400).json({
+        message: "The quote cannot be changed after the customer accepts it.",
+      })
     }
-    updatePayload.quoted_price = numPrice
+    if (existing.medium === "Charcoal Portrait" && quoted_price !== existing.quoted_price) {
+      return res.status(400).json({
+        message: "Fixed-price charcoal portrait quotes cannot be changed.",
+      })
+    }
+    updatePayload.quoted_price = quoted_price
+  }
+
+  const resultingQuote = quoted_price ?? existing.quoted_price
+  if (
+    status === "quoted" &&
+    (typeof resultingQuote !== "number" ||
+      !Number.isFinite(resultingQuote) ||
+      resultingQuote <= 0)
+  ) {
+    return res.status(400).json({
+      message: "A valid positive quote is required before marking the commission quoted.",
+    })
   }
 
   if (currency_code !== undefined) {
-    updatePayload.currency_code = String(currency_code).toLowerCase()
+    updatePayload.currency_code = currency_code
   }
 
   if (admin_notes !== undefined) {
@@ -99,29 +126,11 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   const updated = await commissionService.updateCommissions(updatePayload)
 
-  if (status !== undefined || quoted_price !== undefined) {
-    try {
-      const eventBus: any = req.scope.resolve(Modules.EVENT_BUS)
-      if (eventBus) {
-        await eventBus.emit({
-          name: "commission.status_changed",
-          data: {
-            id: updated.id,
-            customer_id: updated.customer_id,
-            title: updated.title,
-            status: updated.status,
-            previous_status: existing?.status,
-            quoted_price: updated.quoted_price,
-            currency_code: updated.currency_code,
-            admin_notes: updated.admin_notes,
-          },
-        })
-      }
-    } catch (err: any) {
-      console.warn(`[commissions] Failed to emit status changed event: ${err?.message}`)
-    }
-  }
+  await emitCommissionStatusChanged(
+    req.scope,
+    existing.status as CommissionStatus,
+    updated
+  )
 
   return res.status(200).json({ commission: updated })
 }
-

@@ -9,6 +9,13 @@ import {
 import { z } from "@medusajs/framework/zod"
 import multer from "multer"
 import { createRateLimitMiddleware } from "./middlewares/rate-limit"
+import {
+  CommissionMessageSchema,
+  CommissionPaySchema,
+  CommissionUploadUrlSchema,
+  CreateCommissionSchema,
+  UpdateCommissionSchema,
+} from "./schemas/commission"
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -320,7 +327,39 @@ export default defineMiddlewares({
       method: "POST",
       middlewares: [
         createRateLimitMiddleware("commission_upload", 10, 15 * 60 * 1000),
+        validateAndTransformBody(CommissionUploadUrlSchema),
       ],
+    },
+    {
+      matcher: "/store/commissions",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("commission_create", 5, 15 * 60 * 1000),
+        validateAndTransformBody(CreateCommissionSchema),
+      ],
+    },
+    {
+      matcher: "/store/commissions/:id/messages",
+      method: "POST",
+      middlewares: [
+        createRateLimitMiddleware("commission_message", 30, 15 * 60 * 1000),
+        validateAndTransformBody(CommissionMessageSchema),
+      ],
+    },
+    {
+      matcher: "/store/commissions/:id/pay",
+      method: "POST",
+      middlewares: [validateAndTransformBody(CommissionPaySchema)],
+    },
+    {
+      matcher: "/admin/commissions/:id",
+      method: "POST",
+      middlewares: [validateAndTransformBody(UpdateCommissionSchema)],
+    },
+    {
+      matcher: "/admin/commissions/:id/messages",
+      method: "POST",
+      middlewares: [validateAndTransformBody(CommissionMessageSchema)],
     },
     {
       matcher: "/store/commissions/*/payment-session",

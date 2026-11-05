@@ -3,6 +3,10 @@ import { MedusaError } from "@medusajs/framework/utils"
 import { COMMISSION_MODULE } from "../../../../../modules/commission"
 import CommissionModuleService from "../../../../../modules/commission/service"
 import { completeCommissionPaymentWorkflow } from "../../../../../workflows/complete-commission-payment"
+import {
+  CommissionIdSchema,
+  CommissionPaySchema,
+} from "../../../../schemas/commission"
 
 type PayRequestBody = {
   session_id: string
@@ -17,14 +21,19 @@ export async function POST(req: MedusaRequest<PayRequestBody>, res: MedusaRespon
     return res.status(401).json({ message: "Authentication required." })
   }
 
-  const { id } = req.params
-  const body = req.body || {}
-
-  if (!body.session_id || !body.razorpay_payment_id || !body.razorpay_signature) {
+  const parsedId = CommissionIdSchema.safeParse(req.params.id)
+  if (!parsedId.success) {
+    return res.status(400).json({ message: "Invalid commission ID." })
+  }
+  const id = parsedId.data
+  const parsedBody = CommissionPaySchema.safeParse(req.body)
+  if (!parsedBody.success) {
     return res.status(400).json({
-      message: "session_id, razorpay_payment_id, and razorpay_signature are required.",
+      message:
+        "session_id, razorpay_payment_id, razorpay_order_id, and razorpay_signature are required.",
     })
   }
+  const body = parsedBody.data
 
   // Ensure customer owns this commission
   const commissionService: CommissionModuleService =

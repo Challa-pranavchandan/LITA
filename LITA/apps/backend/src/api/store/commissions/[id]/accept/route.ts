@@ -1,7 +1,12 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { Modules } from "@medusajs/framework/utils"
 import { COMMISSION_MODULE } from "../../../../../modules/commission"
 import CommissionModuleService from "../../../../../modules/commission/service"
+import {
+  assertCommissionTransition,
+  emitCommissionStatusChanged,
+  type CommissionStatus,
+} from "../../../../../lib/commission-status"
+import { CommissionIdSchema } from "../../../../schemas/commission"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const customerId = (req as any).auth_context?.actor_id
@@ -9,7 +14,11 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     return res.status(401).json({ message: "Authentication required." })
   }
 
-  const { id } = req.params
+  const parsedId = CommissionIdSchema.safeParse(req.params.id)
+  if (!parsedId.success) {
+    return res.status(400).json({ message: "Invalid commission ID." })
+  }
+  const id = parsedId.data
   const commissionService: CommissionModuleService = req.scope.resolve(COMMISSION_MODULE)
 
   const commission = await commissionService.retrieveCommission(id)
@@ -23,40 +32,34 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     })
   }
 
-  if (!commission.quoted_price || commission.quoted_price <= 0) {
+  if (
+    typeof commission.quoted_price !== "number" ||
+    !Number.isSafeInteger(commission.quoted_price) ||
+    commission.quoted_price <= 0
+  ) {
     return res.status(400).json({
       message: "No valid quote price has been set by the artist yet.",
     })
   }
+
+  assertCommissionTransition(
+    commission.status as CommissionStatus,
+    "accepted"
+  )
 
   const updated = await commissionService.updateCommissions({
     id,
     status: "accepted",
   })
 
-  try {
-    const eventBus: any = req.scope.resolve(Modules.EVENT_BUS)
-    if (eventBus) {
-      await eventBus.emit({
-        name: "commission.status_changed",
-        data: {
-          id: updated.id,
-          customer_id: updated.customer_id,
-          title: updated.title,
-          status: "accepted",
-          previous_status: "quoted",
-          quoted_price: updated.quoted_price,
-          currency_code: updated.currency_code,
-        },
-      })
-    }
-  } catch (err: any) {
-    console.warn(`[commissions] Failed to emit accept status event: ${err?.message}`)
-  }
+  await emitCommissionStatusChanged(
+    req.scope,
+    commission.status as CommissionStatus,
+    updated
+  )
 
   return res.status(200).json({
     message: "Quote accepted successfully! The artist will now create your order.",
     commission: updated,
   })
 }
-

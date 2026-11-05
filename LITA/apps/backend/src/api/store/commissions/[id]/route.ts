@@ -1,7 +1,8 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { COMMISSION_MODULE } from "../../../../modules/commission"
 import CommissionModuleService from "../../../../modules/commission/service"
-import { getPresignedDownloadUrl } from "../../../../lib/r2"
+import { getPresignedPrivateDownloadUrl } from "../../../../lib/r2"
+import { CommissionIdSchema } from "../../../schemas/commission"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const customerId = (req as any).auth_context?.actor_id
@@ -9,7 +10,11 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     return res.status(401).json({ message: "Authentication required." })
   }
 
-  const { id } = req.params
+  const parsedId = CommissionIdSchema.safeParse(req.params.id)
+  if (!parsedId.success) {
+    return res.status(400).json({ message: "Invalid commission ID." })
+  }
+  const id = parsedId.data
   const commissionService: CommissionModuleService = req.scope.resolve(COMMISSION_MODULE)
 
   const commission = await commissionService.retrieveCommission(id)
@@ -20,26 +25,22 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   // Retrieve message negotiation history
   const [messages] = await commissionService.listAndCountCommissionMessages(
     { commission_id: id },
-    { order: { created_at: "ASC" }, take: 100 }
+    { order: { created_at: "DESC" }, take: 100 }
   )
 
   // Attach presigned download URLs for images
   let imagesWithUrls: any = commission.images
   if (Array.isArray(commission.images)) {
     imagesWithUrls = await Promise.all(
-      commission.images.map(async (img: any) => {
-        try {
-          const url = await getPresignedDownloadUrl(img.key, 900)
-          return { ...img, url }
-        } catch {
-          return img
-        }
-      })
+      commission.images.map(async (img: any) => ({
+        ...img,
+        url: await getPresignedPrivateDownloadUrl(img.key, 900),
+      }))
     )
   }
 
   return res.status(200).json({
     commission: { ...commission, images: imagesWithUrls as any },
-    messages,
+    messages: messages.reverse(),
   })
 }

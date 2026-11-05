@@ -140,7 +140,7 @@ describe("Commission Payment Path (B10 Hardening)", () => {
       ).rejects.toThrow(/greater than 0/)
     })
 
-    it("accepts valid awaiting_payment and converted commissions", async () => {
+    it("accepts a valid awaiting_payment commission", async () => {
       const commissionData = {
         id: "com_valid",
         customer_id: "cus_123",
@@ -162,6 +162,29 @@ describe("Commission Payment Path (B10 Hardening)", () => {
       )
 
       expect(result).toEqual(commissionData)
+    })
+
+    it("rejects legacy converted commissions from payment initiation", async () => {
+      const mockCommissionService = {
+        retrieveCommission: jest.fn().mockResolvedValue({
+          id: "com_legacy",
+          customer_id: "cus_123",
+          status: "converted",
+          quoted_price: 75000,
+          order_id: "order_123",
+        }),
+      }
+      const container = createContainer()
+      container.register({
+        [COMMISSION_MODULE]: asValue(mockCommissionService),
+      })
+
+      await expect(
+        validateCommissionForSession(
+          { commission_id: "com_legacy", customer_id: "cus_123" },
+          container
+        )
+      ).rejects.toThrow(/awaiting payment/)
     })
   })
 
@@ -304,6 +327,7 @@ describe("Commission Payment Path (B10 Hardening)", () => {
         body: {
           session_id: "payses_123",
           razorpay_payment_id: "pay_123",
+          razorpay_order_id: "order_123",
           razorpay_signature: "sig_123",
         },
         scope: container,

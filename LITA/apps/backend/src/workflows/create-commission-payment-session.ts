@@ -57,10 +57,7 @@ export async function validateCommissionForSession(
     )
   }
 
-  if (
-    commission.status !== "awaiting_payment" &&
-    commission.status !== "converted"
-  ) {
+  if (commission.status !== "awaiting_payment") {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
       `Commission status is '${commission.status}'. Payment can only be initiated for commissions awaiting payment.`
@@ -74,7 +71,11 @@ export async function validateCommissionForSession(
     )
   }
 
-  if (!commission.quoted_price || commission.quoted_price <= 0) {
+  if (
+    typeof commission.quoted_price !== "number" ||
+    !Number.isSafeInteger(commission.quoted_price) ||
+    commission.quoted_price <= 0
+  ) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
       "Commission must have a quoted price greater than 0."

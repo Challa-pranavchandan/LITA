@@ -1,14 +1,14 @@
 # Custom Commission Module (Next.js + Medusa v2 + Cloudflare R2)
 
-Flow: Client submits request (images -> R2) -> Admin sees it in a "Commissions" section -> chat/negotiate, set quote -> client accepts -> admin clicks **Convert to Order** -> Medusa draft order is created and linked back to the commission.
+Flow: Client submits a request (images -> private R2) -> the studio discusses and quotes it -> the customer accepts -> the studio converts it to a draft order -> the customer pays through Razorpay. Acceptance does not create an order.
 
-> Code below is a starting skeleton, not tested against your repo. Check Medusa v2 docs for exact imports in your installed version.
+The commission is separate from ordinary artwork checkout. Its status path is `new -> in_discussion -> quoted -> accepted -> awaiting_payment -> paid`. Fixed-price charcoal portraits start as `quoted`; their price is calculated by the backend. `converted` is retained only for old records and is not accepted by current payment endpoints.
 
 ---
 
 ## 1. Data model
 
-Commission statuses: `new -> in_discussion -> quoted -> accepted -> converted` (plus `rejected`, `cancelled`).
+Commission statuses: `new -> in_discussion -> quoted -> accepted -> awaiting_payment -> paid` (plus `rejected` and `cancelled`).
 
 `src/modules/commission/models/commission.ts`
 ```ts
@@ -27,7 +27,7 @@ export const Commission = model.define("commission", {
   status: model.enum([
     "new","in_discussion","quoted","accepted","converted","rejected","cancelled",
   ]).default("new"),
-  quoted_price: model.number().nullable(),     // set by admin, in smallest currency unit
+  quoted_price: model.number().nullable(),     // INR major units
   currency_code: model.text().default("inr"),
   admin_notes: model.text().nullable(),
   order_id: model.text().nullable(),           // filled on conversion
@@ -82,27 +82,28 @@ export async function POST(req, res) {
 ```
 Client: request URL -> `PUT` file to `url` -> keep `key` -> send keys in the commission form.
 
-**Keep the bucket private.** Reference images are client-private. For the admin dashboard, generate short-lived presigned GET URLs (`GetObjectCommand`, 10-15 min) when loading a commission. R2 bucket CORS must allow `PUT` from your storefront origin.
+**Keep the bucket private.** Commission upload and download helpers require R2 credentials and return only short-lived presigned URLs. The upload signature binds the content type and size; commission submission verifies the stored object's size, content type, and image signature. The API also enforces a 10 MB per-image limit and a maximum of five images. R2 bucket CORS must allow `PUT` from your storefront origin.
 
 Env: `R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET`.
 
 ## 3. Client submit endpoint
 
-`POST /store/commissions` -> validate with zod (title, idea required; max ~5 images; every image key must start with `commissions/${customerId}/`) -> `commissionService.createCommissions(...)`, status `new`, customer_id from auth, never from the request body.
-
+`POST /store/commissions` -> validate with Zod (title and idea required; max five images; each image key must start with `commissions/${customerId}/` and refer to a verified R2 image) -> `commissionService.createCommissions(...)`, status `new`, customer_id from auth, never from the request body. Charcoal portrait prices are calculated on the server from size and number of people and start at `quoted`.
 `GET /store/commissions` -> the client's own commissions + status (so they can see progress and an "Accept quote" button when status = `quoted`).
-`POST /store/commissions/:id/accept` -> only if status is `quoted` and customer matches -> status `accepted`.
+`GET /store/commissions/:id` and `POST /store/commissions/:id/messages` -> verify ownership before returning commission data, messages, or signed image URLs.
+`POST /store/commissions/:id/accept` -> only if status is `quoted`, the quote is a positive integer, and the customer matches -> status `accepted`. No order is created by acceptance.
+`POST /store/commissions/:id/payment-session` and `/pay` -> verify ownership, commission/order/session linkage, payment status, and Razorpay verification before capture and order conversion. A verified Razorpay webhook can retry completion idempotently.
 
 ## 4. Admin API
 
 - `GET /admin/commissions?status=&q=` -> list with customer id/name/email (resolve via customer module), image presigned URLs.
 - `GET /admin/commissions/:id` -> full detail + messages.
-- `POST /admin/commissions/:id` -> update `status`, `quoted_price`, `admin_notes`.
+- `POST /admin/commissions/:id` -> validate quote and notes; only allow legal studio transitions (including setting `in_discussion` and `quoted`). The server prevents changing a quote after acceptance.
 - `POST /admin/commissions/:id/convert` -> convert to order (below).
 
 ## 5. Convert to order (admin action)
 
-Use a Medusa **workflow** so it's atomic and compensatable.
+Use a Medusa **workflow** with a per-commission lock so concurrent clicks/retries cannot create duplicate orders.
 
 Setup (once): create a product "Custom Commission" with one variant (manage inventory off). The quote is applied as a unit price override on that variant.
 
@@ -120,9 +121,11 @@ import { createDraftOrderWorkflow } from "@medusajs/medusa/core-flows"
 //             metadata: { commission_id, title } }],
 //   shipping_address, metadata: { commission_id }
 // }})
-// step 3: update commission -> { status: "converted", order_id }
+// step 3: create payment collection and update commission -> { status: "awaiting_payment", order_id }
 ```
-Then the admin confirms/pays the draft order using Medusa's draft-order flow (or sends the client a payment link). Guard against double conversion: reject if `order_id` is already set.
+The workflow rejects unaccepted/previously converted commissions, validates the quote, links the draft order, and creates its payment collection. A retry is rejected before creating another draft order.
+
+Payment completion is a separate workflow. It verifies the client callback through the Razorpay provider or accepts a provider-authenticated webhook, captures payment, converts the draft order to a regular order, and only then marks the commission `paid`. Failed/cancelled attempts do not change the commission status, so the customer can retry.
 
 The existing "pay" question (full payment vs 50% advance) is a business choice - for commissions, many artists take an advance. You can model that as two payment collections later; start with full.
 
@@ -137,7 +140,10 @@ Medusa v2 admin extension: `src/admin/routes/commissions/page.tsx` (adds a **Com
 ## 7. Client UI (Next.js)
 
 - `/commission/new`: form (title, idea, requirements, medium, size, budget, deadline) + drag-and-drop image upload with preview and progress, uploading straight to R2.
-- `/account/commissions`: list + detail, status timeline, "Accept quote" button.
+- `/account`: commissions list.
+- `/account/commissions/:id/pay`: commission details, signed reference images, refreshed discussion, accept-quote or payment action.
+
+Commission emails are triggered for the initial request and each status transition. Subscriber failures are logged and do not roll back a status change.
 
 ## 8. Build order
 

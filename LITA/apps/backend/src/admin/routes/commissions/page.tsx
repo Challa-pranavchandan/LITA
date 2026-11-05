@@ -94,6 +94,12 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelled",
 }
 
+const adminStatusTransitions: Record<string, string[]> = {
+  new: ["in_discussion", "rejected", "cancelled"],
+  in_discussion: ["quoted", "rejected", "cancelled"],
+  quoted: ["in_discussion", "rejected", "cancelled"],
+}
+
 const CommissionsPage = () => {
   const qc = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -260,6 +266,8 @@ const CommissionsPage = () => {
                 <Select.Item value="in_discussion">In Discussion</Select.Item>
                 <Select.Item value="quoted">Quoted</Select.Item>
                 <Select.Item value="accepted">Accepted</Select.Item>
+                <Select.Item value="awaiting_payment">Awaiting Payment</Select.Item>
+                <Select.Item value="paid">Paid</Select.Item>
                 <Select.Item value="converted">Converted to Order</Select.Item>
                 <Select.Item value="rejected">Rejected</Select.Item>
                 <Select.Item value="cancelled">Cancelled</Select.Item>
@@ -622,15 +630,13 @@ const CommissionsPage = () => {
                         <Select.Value />
                       </Select.Trigger>
                       <Select.Content>
-                        <Select.Item value="new">New Request</Select.Item>
-                        <Select.Item value="in_discussion">In Discussion</Select.Item>
-                        <Select.Item value="quoted">Quoted</Select.Item>
-                        <Select.Item value="accepted">Quote Accepted</Select.Item>
-                        <Select.Item value="awaiting_payment">Awaiting Payment</Select.Item>
-                        <Select.Item value="paid">Paid</Select.Item>
-                        <Select.Item value="converted">Converted to Order</Select.Item>
-                        <Select.Item value="rejected">Rejected</Select.Item>
-                        <Select.Item value="cancelled">Cancelled</Select.Item>
+                        {[editStatus, ...(adminStatusTransitions[editStatus] || [])]
+                          .filter((value, index, values) => values.indexOf(value) === index)
+                          .map((value) => (
+                            <Select.Item key={value} value={value}>
+                              {statusLabels[value] || value}
+                            </Select.Item>
+                          ))}
                       </Select.Content>
                     </Select>
                   </div>
@@ -642,6 +648,7 @@ const CommissionsPage = () => {
                       type="number"
                       placeholder="e.g. 25000"
                       value={editQuotePrice}
+                      disabled={selectedCommission.medium === "Charcoal Portrait"}
                       onChange={(e) => setEditQuotePrice(e.target.value)}
                     />
                   </div>

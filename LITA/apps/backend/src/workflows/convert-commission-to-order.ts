@@ -1,51 +1,112 @@
+import { randomUUID } from "crypto"
 import {
   createStep,
   createWorkflow,
   StepResponse,
   WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
-import { Modules, OrderStatus } from "@medusajs/framework/utils"
+import {
+  MedusaError,
+  Modules,
+  OrderStatus,
+  ContainerRegistrationKeys,
+} from "@medusajs/framework/utils"
 import {
   createOrderPaymentCollectionWorkflow,
   createOrderWorkflow,
 } from "@medusajs/core-flows"
 import { COMMISSION_MODULE } from "../modules/commission"
 import CommissionModuleService from "../modules/commission/service"
+import {
+  assertCommissionCanConvert,
+  emitCommissionStatusChanged,
+} from "../lib/commission-status"
 
 export type ConvertCommissionInput = {
   commission_id: string
 }
 
+type CommissionLockingService = {
+  acquire: (key: string, args?: { ownerId?: string; expire?: number }) => Promise<void>
+  release: (key: string, args?: { ownerId?: string }) => Promise<boolean>
+}
+
+const acquireCommissionConversionLockStep = createStep(
+  "acquire-commission-conversion-lock",
+  async (
+    input: ConvertCommissionInput,
+    { container }
+  ): Promise<
+    StepResponse<
+      { commission_id: string; owner_id: string },
+      { commission_id: string; owner_id: string }
+    >
+  > => {
+    const locking = container.resolve<CommissionLockingService>(Modules.LOCKING)
+    const ownerId = randomUUID()
+    await locking.acquire(`commission_conversion:${input.commission_id}`, {
+      ownerId,
+      expire: 900,
+    })
+    return new StepResponse(
+      { commission_id: input.commission_id, owner_id: ownerId },
+      { commission_id: input.commission_id, owner_id: ownerId }
+    )
+  },
+  async (lock, { container }) => {
+    if (!lock) return
+    const locking = container.resolve<CommissionLockingService>(Modules.LOCKING)
+    await locking.release(`commission_conversion:${lock.commission_id}`, {
+      ownerId: lock.owner_id,
+    })
+  }
+)
+
+const releaseCommissionConversionLockStep = createStep(
+  "release-commission-conversion-lock",
+  async (
+    input: {
+      commission_id: string
+      owner_id: string
+      commission: any
+    },
+    { container }
+  ) => {
+    const locking = container.resolve<CommissionLockingService>(Modules.LOCKING)
+    const released = await locking.release(
+      `commission_conversion:${input.commission_id}`,
+      { ownerId: input.owner_id }
+    )
+    if (!released) {
+      const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
+      logger.warn(
+        `[commissions] Conversion lock for ${input.commission_id} expired or was not owned by this workflow.`
+      )
+    }
+    return new StepResponse(input.commission)
+  }
+)
+
 /* ---------------- STEP 1: Validate Commission ---------------- */
 
 export const validateCommissionStep = createStep(
   "validate-commission-for-conversion",
-  async ({ commission_id }: ConvertCommissionInput, { container }) => {
+  async (
+    { commission_id }: ConvertCommissionInput,
+    { container }
+  ) => {
     const commissionService: CommissionModuleService =
       container.resolve(COMMISSION_MODULE)
     const commission = await commissionService.retrieveCommission(commission_id)
 
     if (!commission) {
-      throw new Error(`Commission with ID ${commission_id} not found.`)
-    }
-
-    if (commission.order_id) {
-      throw new Error(
-        `Commission is already converted to order (${commission.order_id}). Double conversion is blocked.`
+      throw new MedusaError(
+        MedusaError.Types.NOT_FOUND,
+        `Commission with ID ${commission_id} not found.`
       )
     }
 
-    if (commission.status !== "accepted") {
-      throw new Error(
-        `Only commissions with status 'accepted' can be converted to an order. Current status: ${commission.status}`
-      )
-    }
-
-    if (!commission.quoted_price || commission.quoted_price <= 0) {
-      throw new Error(
-        "Commission must have a valid quoted price greater than 0 before converting to an order."
-      )
-    }
+    assertCommissionCanConvert(commission)
 
     return new StepResponse(commission)
   }
@@ -211,26 +272,11 @@ export const updateCommissionConvertedStep = createStep(
       admin_notes: `Converted to Draft Order ${order_id} - Awaiting Payment`,
     })
 
-    try {
-      const eventBus: any = container.resolve(Modules.EVENT_BUS)
-      if (eventBus) {
-        await eventBus.emit({
-          name: "commission.status_changed",
-          data: {
-            id: updated.id,
-            customer_id: updated.customer_id,
-            title: updated.title,
-            status: "awaiting_payment",
-            previous_status: "accepted",
-            quoted_price: updated.quoted_price,
-            currency_code: updated.currency_code,
-            order_id,
-          },
-        })
-      }
-    } catch (err: any) {
-      console.warn(`[commissions] Failed to emit converted status event: ${err?.message}`)
-    }
+    await emitCommissionStatusChanged(
+      container,
+      "accepted",
+      updated
+    )
 
     return new StepResponse(updated, { commission_id })
   },
@@ -251,6 +297,7 @@ export const updateCommissionConvertedStep = createStep(
 export const convertCommissionToOrderWorkflow = createWorkflow(
   "convert-commission-to-order",
   (input: ConvertCommissionInput) => {
+    const lock = acquireCommissionConversionLockStep(input)
     const commission = validateCommissionStep(input)
     const variantInfo = resolveCommissionVariantStep()
     const draftOrder = createCommissionDraftOrderStep({
@@ -265,9 +312,14 @@ export const convertCommissionToOrderWorkflow = createWorkflow(
       commission_id: input.commission_id,
       order_id: draftOrder.id,
     })
+    const finalCommission = releaseCommissionConversionLockStep({
+      commission_id: input.commission_id,
+      owner_id: lock.owner_id,
+      commission: updatedCommission,
+    })
 
     return new WorkflowResponse({
-      commission: updatedCommission,
+      commission: finalCommission,
       order: draftOrder,
       payment_collection: paymentCollection,
     })
