@@ -27,9 +27,9 @@ describe("medusa-config module and environment configuration", () => {
     process.env = { ...originalEnv }
   })
 
-  describe("manual UPI payment module feature flag", () => {
+  describe("manual UPI payment module and provider configuration", () => {
     test.each([undefined, "false"])(
-      "does not register the UPI payment module unless explicitly enabled (%s)",
+      "registers the empty UPI payment module with the feature disabled (%s)",
       (enabled) => {
         if (enabled === undefined) {
           delete process.env.ENABLE_UPI_MANUAL
@@ -43,7 +43,7 @@ describe("medusa-config module and environment configuration", () => {
             (module as { resolve?: string }).resolve === "./src/modules/upi-payment"
         )
 
-        expect(upiModule).toBeUndefined()
+        expect(upiModule).toBeDefined()
       }
     )
 

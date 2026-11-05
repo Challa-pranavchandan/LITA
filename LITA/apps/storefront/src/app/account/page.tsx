@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCustomer, listOrders } from "@/lib/data/customer";
+import {
+  getCustomer,
+  getCustomerAddresses,
+  listOrders,
+} from "@/lib/data/customer";
 import { getCustomerTradeApplication } from "@/lib/data/trade";
 import { getCustomerCommissions } from "@/lib/data/commission";
 import { AccountDashboard } from "@/components/auth/AccountDashboard";
@@ -18,7 +22,8 @@ export default async function AccountPage() {
     redirect("/login?next=/account");
   }
 
-  const [orders, tradeApplication, commissions] = await Promise.all([
+  const [addresses, orders, tradeApplication, commissions] = await Promise.all([
+    getCustomerAddresses(),
     listOrders(),
     getCustomerTradeApplication(),
     getCustomerCommissions(),
@@ -28,6 +33,7 @@ export default async function AccountPage() {
     <div className="bg-white min-h-[calc(100vh-var(--header-h)-120px)] py-12 md:py-16 px-6 md:px-12">
       <AccountDashboard
         customer={customer}
+        addresses={addresses}
         orders={orders}
         tradeApplication={tradeApplication}
         commissions={commissions}

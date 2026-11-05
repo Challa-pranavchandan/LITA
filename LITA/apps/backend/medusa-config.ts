@@ -175,6 +175,9 @@ module.exports = defineConfig({
       resolve: "./src/modules/gallery",
     },
     {
+      resolve: "./src/modules/exhibition",
+    },
+    {
       resolve: "./src/modules/trade",
     },
     {
@@ -189,13 +192,9 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/wishlist",
     },
-    ...(enableUpiManual
-      ? [
-          {
-            resolve: "./src/modules/upi-payment",
-          },
-        ]
-      : []),
+    {
+      resolve: "./src/modules/upi-payment",
+    },
     {
       resolve: "@medusajs/medusa/payment",
       options: {

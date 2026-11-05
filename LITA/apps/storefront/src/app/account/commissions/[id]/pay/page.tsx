@@ -5,6 +5,7 @@ import { getCustomer } from "@/lib/data/customer";
 import { getCustomerCommission } from "@/lib/data/commission";
 import { formatMoney } from "@/lib/format";
 import CommissionPayButton from "@/components/commission/CommissionPayButton";
+import { AcceptCommissionQuoteButton } from "@/components/commission/AcceptCommissionQuoteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ export default async function CommissionPayPage(props: {
 
   const commission = detail.commission;
   const isPaid = commission.status === "paid" || !!commission.paid_at;
+  const canPay =
+    commission.status === "awaiting_payment" || commission.status === "converted";
 
   return (
     <div className="bg-white min-h-[calc(100vh-var(--header-h)-120px)] py-12 md:py-20 px-6 md:px-12">
@@ -173,13 +176,30 @@ export default async function CommissionPayPage(props: {
                     </p>
                   )}
                 </div>
-              ) : (
+              ) : commission.status === "quoted" && commission.quoted_price ? (
+                <div className="space-y-3 pt-2">
+                  <p className="text-xs leading-relaxed text-neutral-600">
+                    Accept this {commission.medium === "Charcoal Portrait" ? "fixed price" : "quote"}.
+                    The studio will prepare your payment order next.
+                  </p>
+                  <AcceptCommissionQuoteButton
+                    commissionId={commission.id}
+                    isCharcoalPortrait={commission.medium === "Charcoal Portrait"}
+                  />
+                </div>
+              ) : canPay ? (
                 <div className="pt-2">
                   <CommissionPayButton
                     commission={commission}
                     customer={customer}
                   />
                 </div>
+              ) : (
+                <p className="border border-neutral-200 bg-white p-4 text-xs leading-relaxed text-neutral-600">
+                  {commission.status === "accepted"
+                    ? "Your fixed price is accepted. The studio is preparing your payment order."
+                    : "The studio is reviewing your commission request."}
+                </p>
               )}
 
               <div className="pt-4 border-t border-neutral-200 text-[11px] text-neutral-500 space-y-1">

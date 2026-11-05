@@ -1,5 +1,6 @@
 "use server";
 
+import { FetchError } from "@medusajs/js-sdk";
 import { revalidatePath } from "next/cache";
 import { sdk } from "@/lib/medusa";
 import { getAuthHeaders } from "@/lib/data/customer";
@@ -110,6 +111,10 @@ export async function createCommissionRequest(payload: {
   budget?: number;
   deadline?: string;
   images?: CommissionImage[];
+  charcoal_portrait?: {
+    size: "A4" | "A3";
+    person_count: number;
+  };
 }): Promise<{ ok: boolean; commission?: Commission; error?: string }> {
   try {
     const authHeaders = await getAuthHeaders();
@@ -254,11 +259,20 @@ export async function sendCommissionMessage(
  */
 export async function initCommissionPaymentSession(
   id: string
-): Promise<{ ok: boolean; sessionData?: CommissionPaymentSessionData; error?: string }> {
+): Promise<{
+  ok: boolean;
+  sessionData?: CommissionPaymentSessionData;
+  error?: string;
+  requiresAuth?: boolean;
+}> {
   try {
     const authHeaders = await getAuthHeaders();
     if (!authHeaders.authorization) {
-      return { ok: false, error: "Authentication required." };
+      return {
+        ok: false,
+        error: "Please log in or create an account to continue to checkout.",
+        requiresAuth: true,
+      };
     }
 
     const res = await sdk.client.fetch<CommissionPaymentSessionData>(
@@ -271,6 +285,13 @@ export async function initCommissionPaymentSession(
 
     return { ok: true, sessionData: res };
   } catch (err: unknown) {
+    if (err instanceof FetchError && err.status === 401) {
+      return {
+        ok: false,
+        error: "Please log in or create an account to continue to checkout.",
+        requiresAuth: true,
+      };
+    }
     return {
       ok: false,
       error: getErrorMessage(err, "Failed to initialize payment session."),
@@ -316,4 +337,3 @@ export async function completeCommissionPayment(
     };
   }
 }
-

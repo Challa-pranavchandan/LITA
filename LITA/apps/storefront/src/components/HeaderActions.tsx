@@ -8,8 +8,8 @@ import {
   HeartIcon,
   UserIcon,
   CloseIcon,
+  CartIcon,
 } from "@/components/livinIcons";
-import { CartDrawer } from "@/components/CartDrawer";
 import { useSaved } from "@/lib/saved";
 import { clearStaleCart } from "@/lib/data/cart";
 import { HttpTypes } from "@medusajs/types";
@@ -30,6 +30,10 @@ export function HeaderActions({
 
   const savedIds = useSaved();
   const savedCount = savedIds.length;
+  const cartCount = (cart?.items ?? []).reduce(
+    (count, item) => count + item.quantity,
+    0
+  );
 
   useEffect(() => {
     if (hasStaleCart) {
@@ -91,7 +95,18 @@ export function HeaderActions({
         </Link>
 
         {/* 3. Cart Icon */}
-        <CartDrawer cart={cart} />
+        <Link
+          href="/cart"
+          className="relative inline-flex items-center justify-center p-1 text-[#222222] transition-opacity hover:opacity-60"
+          aria-label={`Open shopping cart, ${cartCount} ${cartCount === 1 ? "item" : "items"}`}
+        >
+          <CartIcon className="w-[21px] h-[20px]" />
+          {cartCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#111111] px-1 text-[10px] font-semibold text-white tabular-nums">
+              {cartCount}
+            </span>
+          )}
+        </Link>
 
         {/* 4. User / Account Icon */}
         <Link

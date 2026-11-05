@@ -98,6 +98,19 @@ export async function getCustomer(): Promise<HttpTypes.StoreCustomer | null> {
   }
 }
 
+export async function getCustomerAddresses(): Promise<
+  HttpTypes.StoreCustomerAddress[]
+> {
+  const headers = await getAuthHeaders();
+  if (!headers.authorization) return [];
+
+  const { addresses } = await sdk.store.customer.listAddress(
+    { limit: 50 },
+    headers
+  );
+  return addresses;
+}
+
 export async function listOrders(): Promise<HttpTypes.StoreOrder[]> {
   const headers = await getAuthHeaders();
   if (!headers.authorization) return [];

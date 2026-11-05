@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getCustomer } from "@/lib/data/customer";
 import { CommissionRequestForm } from "@/components/CommissionRequestForm";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,26 @@ export default async function CommissionsPage() {
           Collaborate directly with the studio to bring an original vision into physical form. Whether for an architecturally curated residence, a spiritual sanctuary, or a commemorative collection, every commission is handcrafted with reverence and artisanal materials.
         </p>
       </div>
+
+      <Link
+        href="/commissions/charcoal-portrait"
+        className="mb-12 flex flex-col gap-3 border border-dust bg-wall p-6 transition-colors hover:border-ink sm:flex-row sm:items-center sm:justify-between"
+      >
+        <span>
+          <span className="block text-xs font-semibold uppercase tracking-wider text-graphite">
+            Fixed-price option
+          </span>
+          <span className="mt-1 block text-xl font-medium text-ink">
+            Charcoal Portrait
+          </span>
+          <span className="mt-1 block text-sm text-graphite">
+            A4 from ₹999 · A3 from ₹1,500
+          </span>
+        </span>
+        <span className="text-sm font-medium underline underline-offset-4">
+          View prices &amp; request a portrait →
+        </span>
+      </Link>
 
       {/* 3-Step Process Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16 border-y border-dust py-8">

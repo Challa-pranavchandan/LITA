@@ -56,6 +56,35 @@ const UpdateItem = z.object({
   is_published: z.boolean().optional(),
 })
 
+const isDateOnly = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+const ExhibitionFields = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().min(1).max(4000),
+  details: z.string().trim().max(8000).nullable().optional(),
+  location: z.string().trim().max(300).nullable().optional(),
+  start_date: z.string().refine(isDateOnly, "Enter a valid start date."),
+  end_date: z.string().refine(isDateOnly, "Enter a valid end date."),
+  image_url: z.string().url().nullable().optional(),
+  image_alt: z.string().trim().max(300).nullable().optional(),
+  is_published: z.boolean().optional(),
+})
+
+const ExhibitionSchema = ExhibitionFields.refine(
+  (value) => value.end_date >= value.start_date,
+  { message: "End date must be on or after the start date.", path: ["end_date"] }
+)
+
+const UpdateExhibitionSchema = ExhibitionFields.partial().refine(
+  (value) =>
+    !value.start_date || !value.end_date || value.end_date >= value.start_date,
+  { message: "End date must be on or after the start date.", path: ["end_date"] }
+)
+
 export const PostTradeApplicationSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name cannot exceed 120 characters"),
   email: z.string().trim().toLowerCase().pipe(z.string().email("Valid email is required")),
@@ -229,6 +258,16 @@ export default defineMiddlewares({
       matcher: "/admin/gallery/:id",
       method: "POST",
       middlewares: [validateAndTransformBody(UpdateItem)],
+    },
+    {
+      matcher: "/admin/exhibitions",
+      method: "POST",
+      middlewares: [validateAndTransformBody(ExhibitionSchema)],
+    },
+    {
+      matcher: "/admin/exhibitions/:id",
+      method: "POST",
+      middlewares: [validateAndTransformBody(UpdateExhibitionSchema)],
     },
     {
       matcher: "/store/trade-applications",

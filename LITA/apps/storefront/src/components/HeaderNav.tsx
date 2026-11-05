@@ -298,7 +298,7 @@ export function HeaderNav({
               <ul className="space-y-3 text-[14px]">
                 <li>
                   <Link
-                    href="/artworks"
+                    href="/exhibitions#on-view"
                     onClick={() => setActiveMenu(null)}
                     className="text-[#222222] hover:text-black transition-colors block"
                   >
@@ -307,7 +307,7 @@ export function HeaderNav({
                 </li>
                 <li>
                   <Link
-                    href="/artworks"
+                    href="/exhibitions#upcoming"
                     onClick={() => setActiveMenu(null)}
                     className="text-[#222222] hover:text-black transition-colors block"
                   >
@@ -316,7 +316,7 @@ export function HeaderNav({
                 </li>
                 <li>
                   <Link
-                    href="/artworks"
+                    href="/exhibitions#past"
                     onClick={() => setActiveMenu(null)}
                     className="text-[#222222] hover:text-black transition-colors block"
                   >
@@ -326,7 +326,7 @@ export function HeaderNav({
 
                 <li className="pt-2">
                   <Link
-                    href="/artworks"
+                    href="/exhibitions"
                     onClick={() => setActiveMenu(null)}
                     className="text-[#111111] underline underline-offset-4 font-normal block hover:opacity-75"
                   >
@@ -384,6 +384,15 @@ export function HeaderNav({
                       className="text-red-600 hover:text-red-700 transition-colors font-medium block"
                     >
                       Bespoke Commissions
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/commissions/charcoal-portrait"
+                      onClick={() => setActiveMenu(null)}
+                      className="text-[#222222] hover:text-black transition-colors block"
+                    >
+                      Charcoal Portrait
                     </Link>
                   </li>
                   <li className="pt-1">

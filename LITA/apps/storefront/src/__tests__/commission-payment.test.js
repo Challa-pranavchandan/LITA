@@ -76,6 +76,11 @@ describe("Storefront Commission Payment Flow (B10)", () => {
       "Expected commission pay page to check customer session"
     );
     assert.strictEqual(
+      pageSource.includes('redirect(`/login?next=/account/commissions/${id}/pay`)'),
+      true,
+      "Expected unauthenticated customers to return to checkout after login"
+    );
+    assert.strictEqual(
       pageSource.includes("CommissionPayButton"),
       true,
       "Expected commission pay page to render CommissionPayButton"
@@ -106,6 +111,16 @@ describe("Storefront Commission Payment Flow (B10)", () => {
       buttonSource.includes("Payment received! Confirming with studio atelier..."),
       true,
       "Expected CommissionPayButton to show clear confirming state"
+    )
+    assert.strictEqual(
+      buttonSource.includes("if (res.requiresAuth)"),
+      true,
+      "Expected stale sessions to be redirected to login before checkout"
+    )
+    assert.strictEqual(
+      buttonSource.includes("`/login?next=${encodeURIComponent("),
+      true,
+      "Expected login to return customers to their commission checkout"
     )
   })
 })

@@ -205,10 +205,10 @@ export function MobileMenu({
               </button>
               {expandedSection === "exhibitions" && (
                 <div className="bg-[#FAF9F7] px-8 py-4 space-y-2.5 text-[14px]">
-                  <p><Link href="/artworks" className="text-[#333333] hover:text-black">On View</Link></p>
-                  <p><Link href="/artworks" className="text-[#333333] hover:text-black">Upcoming</Link></p>
-                  <p><Link href="/artworks" className="text-[#333333] hover:text-black">Past</Link></p>
-                  <p className="pt-1"><Link href="/artworks" className="text-black underline">All Exhibitions</Link></p>
+                  <p><Link href="/exhibitions#on-view" className="text-[#333333] hover:text-black">On View</Link></p>
+                  <p><Link href="/exhibitions#upcoming" className="text-[#333333] hover:text-black">Upcoming</Link></p>
+                  <p><Link href="/exhibitions#past" className="text-[#333333] hover:text-black">Past</Link></p>
+                  <p className="pt-1"><Link href="/exhibitions" className="text-black underline">All Exhibitions</Link></p>
                 </div>
               )}
             </div>
@@ -238,11 +238,12 @@ export function MobileMenu({
                     </p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[#888888] mb-2">Advisory</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[#888888] mb-2">Services</p>
                     <ul className="space-y-2">
                       <li><Link href="/commissions" className="text-[#333333] hover:text-black">For Individuals</Link></li>
                       <li><Link href="/commissions" className="text-[#333333] hover:text-black">For Companies</Link></li>
                       <li><Link href="/trade" className="text-[#333333] hover:text-black">For Trade</Link></li>
+                      <li><Link href="/commissions/charcoal-portrait" className="text-[#333333] hover:text-black">Charcoal Portrait</Link></li>
                       <li className="pt-1"><Link href="/commissions" className="text-black underline">All Services</Link></li>
                     </ul>
                   </div>

@@ -90,18 +90,28 @@ export function CommissionPayButton({
     setStatusState("initializing");
 
     try {
+      // Check the authenticated server session before loading or opening checkout.
+      const res = await initCommissionPaymentSession(commission.id);
+      if (res.requiresAuth) {
+        setLoading(false);
+        setStatusState("idle");
+        router.push(
+          `/login?next=${encodeURIComponent(
+            `/account/commissions/${commission.id}/pay`
+          )}`
+        );
+        return;
+      }
+      if (!res.ok || !res.sessionData) {
+        throw new Error(res.error || "Unable to initiate payment session.");
+      }
+
       // 1. Load Razorpay script
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded || typeof window === "undefined" || !window.Razorpay) {
         throw new Error(
           "Failed to load Razorpay payment SDK. Please check your internet connection."
         );
-      }
-
-      // 2. Initialize payment session on server (amount comes from DB quoted_price)
-      const res = await initCommissionPaymentSession(commission.id);
-      if (!res.ok || !res.sessionData) {
-        throw new Error(res.error || "Unable to initiate payment session.");
       }
 
       const session = res.sessionData;

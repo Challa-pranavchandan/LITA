@@ -25,8 +25,13 @@ You need a running Medusa v2 backend (default `http://localhost:9000`) and a pub
 | `/checkout` | Address, delivery, payment, place order |
 | `/order/[id]` | Confirmation |
 | `/account` | Sign in, register, order history |
-| `/commissions`, `/contact` | Forms posting to `/api/inquiry` |
+| `/exhibitions` | Current, upcoming, and past exhibitions managed from the Medusa admin |
+| `/commissions` | Bespoke commission form and charcoal portrait option |
+| `/commissions/charcoal-portrait` | Fixed-price A4/A3 charcoal portrait request |
+| `/contact` | Contact form |
 | `/about`, `/shipping` | Placeholder copy to replace |
+
+Manage exhibitions in the Medusa admin under **Exhibitions**. Published entries are classified by their start and end dates (India time) and shown under On View, Upcoming, or Past on `/exhibitions`.
 
 ## Setting up Medusa for this storefront
 
@@ -61,6 +66,8 @@ Stripe uses `@stripe/react-stripe-js` with the session's `client_secret`. Razorp
 ## Forms
 
 `/api/inquiry` accepts newsletter sign-ups, commission requests, artwork inquiries and contact messages. Set `INQUIRY_WEBHOOK_URL` to forward each one to Slack, Discord, Zapier or Make. Without it, submissions are only logged on the server.
+
+Charcoal portrait requests use the commissions API and account workflow. Prices are fixed server-side: A4 is ₹999 for one person, ₹1,499 for two, then ₹500 per extra person; A3 is ₹1,500 for one person, then ₹600 per extra person. Customers can accept the fixed price in their account; the studio then prepares the payment order through the existing commission workflow.
 
 ## Things to replace before launch
 

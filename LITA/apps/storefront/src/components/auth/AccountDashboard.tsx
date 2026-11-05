@@ -27,9 +27,11 @@ import {
   toggleFollowArtist,
 } from "@/lib/followed-artists";
 import CommissionPayButton from "@/components/commission/CommissionPayButton";
+import { AcceptCommissionQuoteButton } from "@/components/commission/AcceptCommissionQuoteButton";
 
 interface AccountDashboardProps {
   customer: HttpTypes.StoreCustomer;
+  addresses: HttpTypes.StoreCustomerAddress[];
   orders: HttpTypes.StoreOrder[];
   tradeApplication?: TradeApplication | null;
   commissions?: Commission[];
@@ -37,6 +39,7 @@ interface AccountDashboardProps {
 
 export function AccountDashboard({
   customer,
+  addresses,
   orders,
   tradeApplication,
   commissions = [],
@@ -209,8 +212,6 @@ export function AccountDashboard({
       }
     });
   }
-
-  const addresses = customer.addresses || [];
 
   return (
     <div className="w-full max-w-[1120px] mx-auto text-left">
@@ -750,6 +751,7 @@ export function AccountDashboard({
             <div className="divide-y divide-[#eeeeee]">
               {commissions.map((c) => {
                 const canPay = c.status === "awaiting_payment" || c.status === "converted";
+                const hasQuote = c.status === "quoted" && Boolean(c.quoted_price);
                 const isPaid = c.status === "paid" || !!c.paid_at;
 
                 return (
@@ -791,6 +793,12 @@ export function AccountDashboard({
                           onSuccess={() => {
                             router.refresh();
                           }}
+                        />
+                      )}
+                      {hasQuote && (
+                        <AcceptCommissionQuoteButton
+                          commissionId={c.id}
+                          isCharcoalPortrait={c.medium === "Charcoal Portrait"}
                         />
                       )}
                       {isPaid && (

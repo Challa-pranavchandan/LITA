@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { COMMISSION_MODULE } from "../../../modules/commission"
 import CommissionModuleService from "../../../modules/commission/service"
 import { getPresignedDownloadUrl } from "../../../lib/r2"
+import { getCharcoalPortraitPrice } from "../../../lib/charcoal-portrait-pricing"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const customerId = (req as any).auth_context?.actor_id
@@ -18,6 +19,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     budget,
     deadline,
     images,
+    charcoal_portrait,
   } = (req.body as any) || {}
 
   if (!title || typeof title !== "string" || !title.trim()) {
@@ -26,6 +28,19 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   if (!idea || typeof idea !== "string" || !idea.trim()) {
     return res.status(400).json({ message: "Description/idea of the artwork is required." })
+  }
+
+  let fixedPortraitPrice: number | null = null
+  if (charcoal_portrait !== undefined) {
+    fixedPortraitPrice = getCharcoalPortraitPrice(
+      charcoal_portrait?.size,
+      charcoal_portrait?.person_count
+    )
+    if (fixedPortraitPrice === null) {
+      return res.status(400).json({
+        message: "Choose A4 or A3 and enter a valid whole number of people.",
+      })
+    }
   }
 
   // Security validation: ensure all reference image keys belong to this customer
@@ -53,12 +68,27 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     customer_id: customerId,
     title: title.trim(),
     idea: idea.trim(),
-    requirements: requirements?.trim() || null,
-    medium: medium?.trim() || null,
-    size: size?.trim() || null,
-    budget: budget ? Number(budget) : null,
+    requirements:
+      fixedPortraitPrice === null
+        ? requirements?.trim() || null
+        : [
+            `Fixed-price charcoal portrait: ${charcoal_portrait.person_count} person(s), ${charcoal_portrait.size}.`,
+            `Total: ₹${fixedPortraitPrice}.`,
+            requirements?.trim(),
+          ]
+            .filter(Boolean)
+            .join(" "),
+    medium: fixedPortraitPrice === null ? medium?.trim() || null : "Charcoal Portrait",
+    size:
+      fixedPortraitPrice === null
+        ? size?.trim() || null
+        : `${charcoal_portrait.size} · ${charcoal_portrait.person_count} ${
+            charcoal_portrait.person_count === 1 ? "person" : "people"
+          }`,
+    budget: fixedPortraitPrice ?? (budget ? Number(budget) : null),
     deadline: deadline ? new Date(deadline) : null,
-    status: "new",
+    status: fixedPortraitPrice === null ? "new" : "quoted",
+    quoted_price: fixedPortraitPrice,
     currency_code: "inr",
     images: validatedImages as any,
   })
