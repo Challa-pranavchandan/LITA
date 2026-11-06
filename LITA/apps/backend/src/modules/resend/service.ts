@@ -9,6 +9,7 @@ import {
   tradeApplicationStatusTemplate,
   commissionStatusTemplate,
   passwordResetTemplate,
+  broadcastEmailTemplate,
 } from "./emails/templates"
 
 export interface ResendServiceOptions {
@@ -93,6 +94,13 @@ export class ResendNotificationProviderService extends AbstractNotificationProvi
         case "password-reset":
         case "auth.password_reset": {
           const rendered = passwordResetTemplate(templateData)
+          subject = subject || rendered.subject
+          html = html || rendered.html
+          break
+        }
+        case "broadcast":
+        case "broadcast.campaign": {
+          const rendered = broadcastEmailTemplate(templateData)
           subject = subject || rendered.subject
           html = html || rendered.html
           break

@@ -28,7 +28,7 @@ const STUDIO_SERVICES = [
     title: "Custom Tailored Artwork",
     description:
       "Collaborate directly with the studio to bring a one-of-a-kind concept to life. Tailored specifically to your spatial dimensions, color palette, and personal narrative.",
-    image: "/about/artist-dan-covert.jpg",
+    image: "/about/custom-artwork.webp",
     features: [
       "1-on-1 direct dialogue with the studio artist",
       "Custom scales, mediums & palette alignment",

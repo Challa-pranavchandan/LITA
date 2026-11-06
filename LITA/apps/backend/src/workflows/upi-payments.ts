@@ -208,10 +208,10 @@ export async function ensureUpiPaymentRecord(
   let created: UpiPaymentRecord | undefined
 
   const sessionAmount = Number((paymentSession as any).amount)
-  const collectionAmount = Number(
+  const collectionAmount = Number((
     order.payment_collections?.find((col) =>
       col.payment_sessions?.some((s) => s.id === paymentSession.id)
-    )?.amount
+    ) as any)?.amount
   )
   const amountToCharge =
     Number.isFinite(sessionAmount) && sessionAmount > 0
@@ -501,7 +501,7 @@ const acquireUpiPaymentLockStep = createStep(
       { id: input.id, owner_id: ownerId }
     )
   },
-  async (rollback, { container }) => {
+  async (rollback: any, { container }) => {
     if (!rollback) return
     const locking = container.resolve<UpipaymentsLockingService>(Modules.LOCKING)
     await locking.release(`upi_payment:${rollback.id}`, {
@@ -692,7 +692,7 @@ const markPaymentVerifiedForCaptureStep = createStep(
       { payment_id: prepared.payment_id, data: originalData }
     )
   },
-  async (rollback, { container }) => {
+  async (rollback: any, { container }) => {
     if (!rollback) return
     const paymentService = container.resolve<UpipaymentsPaymentService>(
       Modules.PAYMENT
@@ -739,7 +739,7 @@ const markUpiPaymentVerifiedStep = createStep(
       reject_reason: previous.reject_reason,
     })
   },
-  async (rollback, { container }) => {
+  async (rollback: any, { container }) => {
     if (!rollback) return
     const paymentService = container.resolve<UpipaymentsService>(
       UPI_PAYMENT_MODULE
@@ -773,14 +773,14 @@ export const syncCommissionOnUpiVerificationStep = createStep(
     { container }
   ) => {
     if (input.prepared.already_verified) {
-      return new StepResponse({ synced: false })
+      return new StepResponse<{ synced: boolean; commission?: any }, any>({ synced: false })
     }
 
     let commissionService: CommissionModuleService
     try {
       commissionService = container.resolve(COMMISSION_MODULE)
     } catch {
-      return new StepResponse({ synced: false })
+      return new StepResponse<{ synced: boolean; commission?: any }, any>({ synced: false })
     }
 
     let commission: any = null
@@ -806,7 +806,7 @@ export const syncCommissionOnUpiVerificationStep = createStep(
     }
 
     if (!commission) {
-      return new StepResponse({ synced: false })
+      return new StepResponse<{ synced: boolean; commission?: any }, any>({ synced: false })
     }
 
     const previousStatus = commission.status
@@ -884,7 +884,7 @@ export const syncCommissionOnUpiVerificationStep = createStep(
         // ignore
       }
 
-      return new StepResponse({ synced: true, commission: updated }, {
+      return new StepResponse<{ synced: boolean; commission?: any }, any>({ synced: true, commission: updated }, {
         commission_id: commission.id,
         previous_status: previousStatus,
         deposit_paid_at: commission.deposit_paid_at,
@@ -948,7 +948,7 @@ export const syncCommissionOnUpiVerificationStep = createStep(
         // ignore
       }
 
-      return new StepResponse({ synced: true, commission: updated }, {
+      return new StepResponse<{ synced: boolean; commission?: any }, any>({ synced: true, commission: updated }, {
         commission_id: commission.id,
         previous_status: previousStatus,
         paid_at: commission.paid_at,
@@ -960,7 +960,7 @@ export const syncCommissionOnUpiVerificationStep = createStep(
 
     return new StepResponse({ synced: false })
   },
-  async (rollback, { container }) => {
+  async (rollback: any, { container }) => {
     if (!rollback?.commission_id) return
     try {
       const commissionService: CommissionModuleService =
@@ -1119,7 +1119,7 @@ const markUpiPaymentExpiredStep = createStep(
       status: payment.status,
     })
   },
-  async (rollback, { container }) => {
+  async (rollback: any, { container }) => {
     if (!rollback) return
     const paymentService = container.resolve<UpipaymentsService>(
       UPI_PAYMENT_MODULE
@@ -1255,7 +1255,7 @@ const rejectUpiPaymentStep = createStep(
     const result = await rejectUpiPaymentRecord(input, paymentService)
     return new StepResponse(result.payment, result.rollback)
   },
-  async (rollback, { container }) => {
+  async (rollback: any, { container }) => {
     if (!rollback) return
     const paymentService = container.resolve<UpipaymentsService>(
       UPI_PAYMENT_MODULE

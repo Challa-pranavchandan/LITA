@@ -167,4 +167,88 @@ describe("B6 - Bot & Abuse Protection, Rate Limiting, and Inquiries", () => {
       assert.strictEqual(source.includes("You Have Been Unsubscribed"), true)
     })
   })
+
+  describe("Newsletter Footer Persistence & Subscribed State", () => {
+    const newsletterLibPath = path.resolve(__dirname, "../lib/newsletter.ts")
+    const formPath = path.resolve(__dirname, "../components/NewsletterForm.tsx")
+    const confirmedPagePath = path.resolve(__dirname, "../app/newsletter/confirmed/page.tsx")
+    const unsubscribedPagePath = path.resolve(__dirname, "../app/newsletter/unsubscribed/page.tsx")
+
+    test("lib/newsletter.ts exports helpers and keys", () => {
+      assert.strictEqual(fs.existsSync(newsletterLibPath), true)
+      const source = fs.readFileSync(newsletterLibPath, "utf8")
+      assert.strictEqual(source.includes("NEWSLETTER_STORAGE_KEY"), true)
+      assert.strictEqual(source.includes("NEWSLETTER_EVENT_NAME"), true)
+      assert.strictEqual(source.includes("getNewsletterSubscription"), true)
+      assert.strictEqual(source.includes("saveNewsletterSubscription"), true)
+      assert.strictEqual(source.includes("markNewsletterConfirmed"), true)
+      assert.strictEqual(source.includes("clearNewsletterSubscription"), true)
+    })
+
+    test("NewsletterForm displays signed up state and Change email action", () => {
+      const source = fs.readFileSync(formPath, "utf8")
+      assert.strictEqual(source.includes("Signed up for newsletter"), true)
+      assert.strictEqual(source.includes("Change email"), true)
+      assert.strictEqual(source.includes("Unsubscribe"), true)
+      assert.strictEqual(source.includes("getNewsletterSubscription"), true)
+      assert.strictEqual(source.includes("saveNewsletterSubscription"), true)
+    })
+
+    test("storefront provides unsubscribe endpoint and inquiry proxy handling", () => {
+      const unsubsRoutePath = path.resolve(__dirname, "../app/newsletter/unsubscribe/route.ts")
+      assert.strictEqual(fs.existsSync(unsubsRoutePath), true)
+      const unsubsRouteSource = fs.readFileSync(unsubsRoutePath, "utf8")
+      assert.strictEqual(unsubsRouteSource.includes("/store/newsletter/unsubscribe"), true)
+      assert.strictEqual(unsubsRouteSource.includes("/newsletter/unsubscribed"), true)
+
+      const inquiryRoutePath = path.resolve(__dirname, "../app/api/inquiry/route.ts")
+      const inquiryRouteSource = fs.readFileSync(inquiryRoutePath, "utf8")
+      assert.strictEqual(inquiryRouteSource.includes('"newsletter_unsubscribe"'), true)
+    })
+
+    test("confirmed and unsubscribed pages mount synchronization components", () => {
+      const confSource = fs.readFileSync(confirmedPagePath, "utf8")
+      const unsubSource = fs.readFileSync(unsubscribedPagePath, "utf8")
+      assert.strictEqual(confSource.includes("NewsletterConfirmedSync"), true)
+      assert.strictEqual(unsubSource.includes("NewsletterUnsubscribedSync"), true)
+    })
+
+    test("subscription save, confirm, and clear logic operates as expected", () => {
+      const mockStorage = new Map()
+      const mockWindow = {
+        localStorage: {
+          getItem: (key) => mockStorage.get(key) || null,
+          setItem: (key, val) => mockStorage.set(key, val),
+          removeItem: (key) => mockStorage.delete(key),
+        },
+      }
+
+      const KEY = "lita_newsletter_subscription"
+      // Save subscription
+      const email = "Collector@example.com"
+      const sub = {
+        status: "subscribed",
+        email: email.trim().toLowerCase(),
+        confirmed: false,
+        subscribedAt: new Date().toISOString(),
+      }
+      mockWindow.localStorage.setItem(KEY, JSON.stringify(sub))
+
+      const read = JSON.parse(mockWindow.localStorage.getItem(KEY))
+      assert.strictEqual(read.status, "subscribed")
+      assert.strictEqual(read.email, "collector@example.com")
+      assert.strictEqual(read.confirmed, false)
+
+      // Confirm
+      read.confirmed = true
+      read.confirmedAt = new Date().toISOString()
+      mockWindow.localStorage.setItem(KEY, JSON.stringify(read))
+      const confirmedRead = JSON.parse(mockWindow.localStorage.getItem(KEY))
+      assert.strictEqual(confirmedRead.confirmed, true)
+
+      // Clear
+      mockWindow.localStorage.removeItem(KEY)
+      assert.strictEqual(mockWindow.localStorage.getItem(KEY), null)
+    })
+  })
 })

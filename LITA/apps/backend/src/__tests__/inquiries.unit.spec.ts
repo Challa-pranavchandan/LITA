@@ -405,4 +405,129 @@ describe("B6 - Backend Inquiries, Newsletter & Rate Limiting", () => {
       expect(subscriber.status).toBe("unsubscribed")
     })
   })
+
+  describe("Admin Newsletter Subscribers Management", () => {
+    it("admin route file exists and configures sidebar label and Envelope icon", () => {
+      const fs = require("fs")
+      const path = require("path")
+      const adminRoutePath = path.resolve(__dirname, "../admin/routes/newsletter-subscribers/page.tsx")
+      expect(fs.existsSync(adminRoutePath)).toBe(true)
+
+      const source = fs.readFileSync(adminRoutePath, "utf8")
+      expect(source).toContain('label: "Newsletter Subscribers"')
+      expect(source).toContain("Envelope")
+      expect(source).toContain("Export CSV")
+      expect(source).toContain("Add Subscriber")
+    })
+
+    it("GET endpoint filters by status and search query", async () => {
+      const { GET } = require("../api/admin/newsletter-subscribers/route")
+      const mockList = [
+        { id: "1", email: "alice@example.com", status: "confirmed", created_at: new Date() },
+        { id: "2", email: "bob@example.com", status: "pending", created_at: new Date() },
+      ]
+
+      const mockInquiryService = {
+        listNewsletterSubscribers: jest.fn().mockImplementation((filters) => {
+          if (filters.status) {
+            return Promise.resolve(mockList.filter((s) => s.status === filters.status))
+          }
+          return Promise.resolve(mockList)
+        }),
+      }
+
+      const req: any = {
+        scope: { resolve: () => mockInquiryService },
+        query: { status: "all", q: "alice" },
+      }
+      let jsonResponse: any = null
+      const res: any = {
+        json: (data: any) => {
+          jsonResponse = data
+          return data
+        },
+      }
+
+      await GET(req, res)
+      expect(jsonResponse.count).toBe(1)
+      expect(jsonResponse.subscribers[0].email).toBe("alice@example.com")
+    })
+
+    it("POST endpoint creates a new subscriber record", async () => {
+      const { POST } = require("../api/admin/newsletter-subscribers/route")
+      const mockInquiryService = {
+        listNewsletterSubscribers: jest.fn().mockResolvedValue([]),
+        createNewsletterSubscribers: jest.fn().mockImplementation((data) =>
+          Promise.resolve({ id: "sub_new", ...data })
+        ),
+      }
+
+      const req: any = {
+        scope: { resolve: () => mockInquiryService },
+        body: { email: "newvip@gallery.com", status: "confirmed" },
+      }
+      let statusCode = 200
+      let jsonResponse: any = null
+      const res: any = {
+        status: (code: number) => {
+          statusCode = code
+          return res
+        },
+        json: (data: any) => {
+          jsonResponse = data
+          return data
+        },
+      }
+
+      await POST(req, res)
+      expect(statusCode).toBe(201)
+      expect(jsonResponse.subscriber.email).toBe("newvip@gallery.com")
+      expect(jsonResponse.subscriber.status).toBe("confirmed")
+    })
+
+    it("POST and DELETE endpoints update and remove a subscriber by ID", async () => {
+      const { POST: updateRoute, DELETE: deleteRoute } = require("../api/admin/newsletter-subscribers/[id]/route")
+      const mockInquiryService = {
+        updateNewsletterSubscribers: jest.fn().mockImplementation((data) =>
+          Promise.resolve({ ...data, email: "collector@lita.in" })
+        ),
+        deleteNewsletterSubscribers: jest.fn().mockResolvedValue(true),
+      }
+
+      const reqUpdate: any = {
+        scope: { resolve: () => mockInquiryService },
+        params: { id: "sub_1" },
+        body: { status: "unsubscribed" },
+      }
+      let updateJson: any = null
+      const resUpdate: any = {
+        json: (data: any) => {
+          updateJson = data
+          return data
+        },
+      }
+
+      await updateRoute(reqUpdate, resUpdate)
+      expect(mockInquiryService.updateNewsletterSubscribers).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "sub_1", status: "unsubscribed" })
+      )
+      expect(updateJson.subscriber.status).toBe("unsubscribed")
+
+      const reqDelete: any = {
+        scope: { resolve: () => mockInquiryService },
+        params: { id: "sub_1" },
+      }
+      let deleteJson: any = null
+      const resDelete: any = {
+        json: (data: any) => {
+          deleteJson = data
+          return data
+        },
+      }
+
+      await deleteRoute(reqDelete, resDelete)
+      expect(mockInquiryService.deleteNewsletterSubscribers).toHaveBeenCalledWith("sub_1")
+      expect(deleteJson.deleted).toBe(true)
+    })
+  })
 })

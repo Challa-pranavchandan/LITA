@@ -10,6 +10,7 @@ const Exhibition = model.define("exhibition", {
   end_date: model.text(),
   image_url: model.text().nullable(),
   image_alt: model.text().nullable(),
+  images: model.json().nullable(),
   is_published: model.boolean().default(true),
 })
 

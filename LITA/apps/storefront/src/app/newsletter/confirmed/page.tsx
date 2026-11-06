@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { NewsletterConfirmedSync } from "@/components/NewsletterSync";
 
 export const metadata: Metadata = {
   title: "Newsletter Subscription Confirmed — Livin In The Art",
@@ -38,6 +39,7 @@ export default async function NewsletterConfirmedPage(props: {
           </>
         ) : (
           <>
+            <NewsletterConfirmedSync />
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 mb-6 text-xl">
               ✓
             </div>

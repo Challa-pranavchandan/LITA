@@ -8,6 +8,12 @@ import {
 } from "@medusajs/framework/http"
 import { z } from "@medusajs/framework/zod"
 import multer from "multer"
+import {
+  CreateBroadcastSchema,
+  UpdateBroadcastSchema,
+  SendTestEmailSchema,
+  TrackEventSchema,
+} from "./schemas/broadcast"
 import { createRateLimitMiddleware } from "./middlewares/rate-limit"
 import {
   CommissionMessageSchema,
@@ -76,17 +82,32 @@ const ExhibitionFields = z.object({
   location: z.string().trim().max(300).nullable().optional(),
   start_date: z.string().refine(isDateOnly, "Enter a valid start date."),
   end_date: z.string().refine(isDateOnly, "Enter a valid end date."),
-  image_url: z.string().url().nullable().optional(),
+  image_url: z.preprocess(
+    (val) => (typeof val === "string" && val.trim() === "" ? null : val),
+    z.string().url().nullable().optional()
+  ),
+  images: z
+    .array(
+      z.union([
+        z.string().url(),
+        z.object({
+          url: z.string().url(),
+          alt: z.string().trim().max(300).nullable().optional(),
+        }),
+      ])
+    )
+    .nullable()
+    .optional(),
   image_alt: z.string().trim().max(300).nullable().optional(),
   is_published: z.boolean().optional(),
 })
 
-const ExhibitionSchema = ExhibitionFields.refine(
+export const ExhibitionSchema = ExhibitionFields.refine(
   (value) => value.end_date >= value.start_date,
   { message: "End date must be on or after the start date.", path: ["end_date"] }
 )
 
-const UpdateExhibitionSchema = ExhibitionFields.partial().refine(
+export const UpdateExhibitionSchema = ExhibitionFields.partial().refine(
   (value) =>
     !value.start_date || !value.end_date || value.end_date >= value.start_date,
   { message: "End date must be on or after the start date.", path: ["end_date"] }
@@ -407,6 +428,26 @@ export default defineMiddlewares({
         authenticate("customer", ["bearer", "session"]),
         createRateLimitMiddleware("wishlist", 120, 15 * 60 * 1000),
       ],
+    },
+    {
+      matcher: "/admin/broadcasts",
+      method: "POST",
+      middlewares: [validateAndTransformBody(CreateBroadcastSchema)],
+    },
+    {
+      matcher: "/admin/broadcasts/:id",
+      method: "POST",
+      middlewares: [validateAndTransformBody(UpdateBroadcastSchema)],
+    },
+    {
+      matcher: "/admin/broadcasts/:id/test",
+      method: "POST",
+      middlewares: [validateAndTransformBody(SendTestEmailSchema)],
+    },
+    {
+      matcher: "/store/broadcasts/:id/track",
+      method: "POST",
+      middlewares: [validateAndTransformBody(TrackEventSchema)],
     },
   ],
 })

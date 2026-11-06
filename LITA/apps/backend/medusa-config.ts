@@ -190,6 +190,9 @@ module.exports = defineConfig({
       resolve: "./src/modules/inquiry",
     },
     {
+      resolve: "./src/modules/broadcast",
+    },
+    {
       resolve: "./src/modules/wishlist",
     },
     {

@@ -1,10 +1,15 @@
 import type { Metadata } from "next"
-import Image from "next/image"
+import { ExhibitionImageGallery } from "./ExhibitionImageGallery"
 
 export const metadata: Metadata = {
   title: "Exhibitions | LITA Studio",
   description:
     "Discover exhibitions currently on view, upcoming shows, and past exhibitions at LITA Studio.",
+}
+
+type ExhibitionImage = {
+  url: string
+  alt?: string | null
 }
 
 type Exhibition = {
@@ -17,6 +22,7 @@ type Exhibition = {
   end_date: string
   image_url: string | null
   image_alt: string | null
+  images?: Array<ExhibitionImage | string> | null
 }
 
 function getTodayInIndia() {
@@ -67,22 +73,13 @@ async function getExhibitions(): Promise<Exhibition[]> {
 
 function ExhibitionCard({ exhibition }: { exhibition: Exhibition }) {
   return (
-    <article className="grid overflow-hidden border border-[#E5E5E5] bg-white md:grid-cols-[minmax(240px,0.8fr)_1.2fr]">
-      {exhibition.image_url ? (
-        <div className="relative min-h-64 bg-[#F1F1EF] md:min-h-80">
-          <Image
-            src={exhibition.image_url}
-            alt={exhibition.image_alt || exhibition.title}
-            fill
-            sizes="(max-width: 768px) 100vw, 40vw"
-            className="object-cover"
-          />
-        </div>
-      ) : (
-        <div className="flex min-h-52 items-center justify-center bg-[#F1F1EF] text-sm text-[#5C6168] md:min-h-80">
-          Exhibition
-        </div>
-      )}
+    <article className="grid overflow-hidden border border-[#E5E5E5] bg-white md:grid-cols-[minmax(280px,0.9fr)_1.1fr]">
+      <ExhibitionImageGallery
+        images={exhibition.images}
+        primaryUrl={exhibition.image_url}
+        primaryAlt={exhibition.image_alt}
+        title={exhibition.title}
+      />
       <div className="flex flex-col justify-center p-6 sm:p-8">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#777]">
           {formatDate(exhibition.start_date)} – {formatDate(exhibition.end_date)}

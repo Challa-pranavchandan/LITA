@@ -893,3 +893,84 @@ export function upiOrderPlacedTemplate(data: OrderPlacedTemplateData): {
 
   return { subject, html }
 }
+
+/* ==========================================================================
+   Broadcast / Campaign Email Template
+   ========================================================================== */
+export interface BroadcastEmailTemplateData {
+  subject: string
+  preheader?: string
+  headline?: string
+  bodyHtml: string
+  imageUrl?: string
+  couponCode?: string
+  ctaText?: string
+  ctaLink?: string
+  storefrontUrl: string
+  recipientEmail?: string
+  unsubscribeUrl?: string
+}
+
+export function broadcastEmailTemplate(data: BroadcastEmailTemplateData): {
+  subject: string
+  html: string
+} {
+  const subject = data.subject || "An Update from Livin In The Art"
+
+  const imageBlock = data.imageUrl
+    ? `<div style="margin-bottom: 24px; text-align: center;">
+        <img src="${escapeHtml(data.imageUrl)}" alt="${escapeHtml(data.headline || subject)}" style="max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 0 auto;" />
+       </div>`
+    : ""
+
+  const couponBlock = data.couponCode
+    ? `<div style="margin: 28px 0; padding: 20px 24px; background-color: #fbf7f4; border: 1px dashed #d5c3b2; border-radius: 4px; text-align: center;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: #7f6e62; margin-bottom: 6px; font-weight: 600;">Exclusive Collector Offer</div>
+        <div style="font-family: 'Courier New', Courier, monospace; font-size: 22px; font-weight: 700; letter-spacing: 0.22em; color: #5f2f3c; padding: 4px 0;">${escapeHtml(data.couponCode)}</div>
+        <div style="font-size: 12px; color: #888888; margin-top: 6px;">Enter this code during checkout to redeem your offer.</div>
+       </div>`
+    : ""
+
+  const ctaBlock =
+    data.ctaText && data.ctaLink
+      ? `<div style="margin: 28px 0; text-align: center;">
+          <a href="${escapeHtml(data.ctaLink)}" style="background-color: #5f2f3c; color: #ffffff; padding: 14px 32px; text-decoration: none; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; border-radius: 2px; display: inline-block;">
+            ${escapeHtml(data.ctaText)}
+          </a>
+         </div>`
+      : ""
+
+  const unsubscribeBlock = `
+    <div style="margin-top: 36px; padding-top: 20px; border-top: 1px solid #eee7de; font-size: 11px; color: #999999; text-align: center; line-height: 1.6;">
+      You received this broadcast as a registered collector or newsletter subscriber with Livin In The Art.<br />
+      ${
+        data.unsubscribeUrl
+          ? `<a href="${escapeHtml(data.unsubscribeUrl)}" style="color: #5f2f3c; text-decoration: underline; margin-top: 4px; display: inline-block;">Manage email preferences or unsubscribe</a>`
+          : ""
+      }
+    </div>
+  `
+
+  const contentHtml = `
+    ${imageBlock}
+    <h1 style="margin: 0 0 18px 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; font-weight: 500; letter-spacing: 0.05em; color: #1a1a1a; line-height: 1.3;">
+      ${escapeHtml(data.headline || subject)}
+    </h1>
+    <div style="font-size: 14px; line-height: 1.7; color: #444444; margin-bottom: 20px;">
+      ${data.bodyHtml}
+    </div>
+    ${couponBlock}
+    ${ctaBlock}
+    ${unsubscribeBlock}
+  `
+
+  return {
+    subject,
+    html: renderEditorialEmail({
+      title: subject,
+      preheader: data.preheader || subject,
+      contentHtml,
+    }),
+  }
+}
+

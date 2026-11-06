@@ -10,7 +10,7 @@ const PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY || "";
 
 type InquiryPayload = {
-  kind?: "contact" | "artwork" | "commission_general" | "trade_general" | "commission" | "trade" | "newsletter";
+  kind?: "contact" | "artwork" | "commission_general" | "trade_general" | "commission" | "trade" | "newsletter" | "newsletter_unsubscribe";
   name?: string;
   email?: string;
   phone?: string;
@@ -105,6 +105,40 @@ export async function POST(req: Request) {
       });
     } catch (err) {
       console.error("[api/inquiry] Failed connecting to backend newsletter service:", err);
+      return NextResponse.json(
+        { error: "The studio service is currently unreachable. Please try again shortly." },
+        { status: 502 }
+      );
+    }
+  }
+
+  // If newsletter_unsubscribe kind, forward to backend unsubscribe endpoint
+  if (body.kind === "newsletter_unsubscribe") {
+    try {
+      const res = await fetch(`${BACKEND_URL}/store/newsletter/unsubscribe`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          email,
+          website: body.website,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: data.message || "Failed to process unsubscribe request." },
+          { status: res.status }
+        );
+      }
+
+      return NextResponse.json({
+        ok: true,
+        unsubscribed: true,
+        message: data.message || "You have been successfully unsubscribed from the newsletter.",
+      });
+    } catch (err) {
+      console.error("[api/inquiry] Failed connecting to backend unsubscribe service:", err);
       return NextResponse.json(
         { error: "The studio service is currently unreachable. Please try again shortly." },
         { status: 502 }

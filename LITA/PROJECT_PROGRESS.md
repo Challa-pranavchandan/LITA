@@ -799,6 +799,7 @@ Each checkpoint has an exit test. Do not start the next one until the current ex
 - [ ] Admin accounts cleaned up; admin access restricted (S12)
 
 ### CP7 - Launch and after
+- [x] Admin Broadcast & Storefront Offers System (Email blasts to subscribers/customers via Resend + on-screen promo modal and announcement banner with dismissal tracking)
 - [ ] DNS cutover and SSL check
 - [ ] 72-hour monitoring of payments, webhooks, emails, errors
 - [ ] Artwork attributes module and admin widgets
