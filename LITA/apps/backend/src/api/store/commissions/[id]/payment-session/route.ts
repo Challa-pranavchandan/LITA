@@ -1,7 +1,10 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MedusaError } from "@medusajs/framework/utils"
 import { createCommissionPaymentSessionWorkflow } from "../../../../../workflows/create-commission-payment-session"
-import { CommissionIdSchema } from "../../../../schemas/commission"
+import {
+  CommissionIdSchema,
+  CommissionPaymentSessionSchema,
+} from "../../../../schemas/commission"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const customerId = (req as any).auth_context?.actor_id
@@ -15,11 +18,17 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
   const id = parsedId.data
 
+  const parsedBody = CommissionPaymentSessionSchema.safeParse(req.body ?? {})
+  if (!parsedBody.success) {
+    return res.status(400).json({ message: "Invalid payment session request." })
+  }
+
   try {
     const { result } = await createCommissionPaymentSessionWorkflow(req.scope).run({
       input: {
         commission_id: id,
         customer_id: customerId,
+        provider_id: parsedBody.data.provider_id,
       },
     })
 

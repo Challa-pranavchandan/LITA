@@ -3,11 +3,16 @@ import {
   ContainerRegistrationKeys,
   MedusaError,
   Modules,
+  OrderStatus,
 } from "@medusajs/framework/utils"
 import {
   cancelOrderWorkflow,
   capturePaymentWorkflow,
 } from "@medusajs/medusa/core-flows"
+import {
+  addOrderTransactionStep,
+  convertDraftOrderWorkflow,
+} from "@medusajs/core-flows"
 import {
   createStep,
   createWorkflow,
@@ -16,6 +21,12 @@ import {
   when,
   WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
+import { COMMISSION_MODULE } from "../modules/commission"
+import CommissionModuleService from "../modules/commission/service"
+import {
+  emitCommissionStatusChanged,
+  type CommissionStatus,
+} from "../lib/commission-status"
 import { generateReferenceCode, isValidUtr } from "../lib/upi"
 import { getUpiOrderExpiryHours } from "../lib/upi-config"
 import { UPI_PAYMENT_MODULE } from "../modules/upi-payment"
@@ -146,8 +157,13 @@ export async function ensureUpiPaymentRecord(
         "cart_id",
         "total",
         "currency_code",
+        "metadata",
+        "payment_collections.id",
+        "payment_collections.amount",
         "payment_collections.payment_sessions.id",
+        "payment_collections.payment_sessions.amount",
         "payment_collections.payment_sessions.provider_id",
+        "payment_collections.payment_sessions.status",
       ],
       filters: { id: order_id },
     })
@@ -172,11 +188,17 @@ export async function ensureUpiPaymentRecord(
 
   const existing = await paymentService.listUpiPayments(
     { order_id },
-    { take: 1 }
+    { take: 10 }
   )
-  if (existing[0]) {
+  const activeExisting = existing.find(
+    (p) =>
+      p.payment_session_id === paymentSession.id ||
+      p.status === "awaiting_proof" ||
+      p.status === "submitted"
+  )
+  if (activeExisting) {
     return {
-      payment: existing[0] as unknown as Record<string, unknown>,
+      payment: activeExisting as unknown as Record<string, unknown>,
       created: false,
     }
   }
@@ -184,6 +206,19 @@ export async function ensureUpiPaymentRecord(
   const expiryHours = getUpiOrderExpiryHours()
   const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000)
   let created: UpiPaymentRecord | undefined
+
+  const sessionAmount = Number((paymentSession as any).amount)
+  const collectionAmount = Number(
+    order.payment_collections?.find((col) =>
+      col.payment_sessions?.some((s) => s.id === paymentSession.id)
+    )?.amount
+  )
+  const amountToCharge =
+    Number.isFinite(sessionAmount) && sessionAmount > 0
+      ? sessionAmount
+      : Number.isFinite(collectionAmount) && collectionAmount > 0
+        ? collectionAmount
+        : Number(order.total)
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
@@ -194,7 +229,7 @@ export async function ensureUpiPaymentRecord(
         payment_session_id: paymentSession.id,
         customer_id: order.customer_id ?? null,
         email: order.email ?? "",
-        amount: Number(order.total),
+        amount: amountToCharge,
         currency_code: order.currency_code.toLowerCase(),
         status: "awaiting_proof",
         expires_at: expiresAt,
@@ -493,8 +528,10 @@ type PreparedUpiVerification = {
   payment: UpiPaymentRecord
   payment_id?: string
   order_total?: number
+  capture_amount?: number
   admin_user_id: string
   already_verified: boolean
+  commission_id?: string
 }
 
 export async function prepareUpiPaymentVerification(
@@ -538,8 +575,11 @@ export async function prepareUpiPaymentVerification(
       "id",
       "total",
       "currency_code",
+      "metadata",
       "payment_collections.payments.id",
       "payment_collections.payments.provider_id",
+      "payment_collections.payments.amount",
+      "payment_collections.payments.data",
     ],
     filters: { id: payment.order_id },
   })
@@ -552,9 +592,12 @@ export async function prepareUpiPaymentVerification(
   }
 
   const orderTotal = Number(order.total)
+  const isCommissionOrder = Boolean((order as any).metadata?.commission_id)
+
   if (
     !Number.isFinite(orderTotal) ||
-    Number(payment.amount) !== orderTotal ||
+    (!isCommissionOrder && Number(payment.amount) !== orderTotal) ||
+    (isCommissionOrder && (Number(payment.amount) <= 0 || Number(payment.amount) > orderTotal)) ||
     payment.currency_code.toLowerCase() !== order.currency_code.toLowerCase()
   ) {
     throw new MedusaError(
@@ -563,10 +606,16 @@ export async function prepareUpiPaymentVerification(
     )
   }
 
-  const paymentId = order.payment_collections
+  const upiPayments = order.payment_collections
     ?.flatMap((collection) => collection.payments ?? [])
-    .find((orderPayment) => orderPayment.provider_id === UPI_MANUAL_PROVIDER_ID)
-    ?.id
+    .filter((orderPayment) => orderPayment.provider_id === UPI_MANUAL_PROVIDER_ID) ?? []
+
+  const paymentCandidate =
+    upiPayments.find((p) => Number((p as any).amount) === Number(payment.amount) && !(p as any).data?.captured_at && !(p as any).captured_at) ||
+    upiPayments.find((p) => !(p as any).data?.captured_at && !(p as any).captured_at) ||
+    upiPayments[0]
+
+  const paymentId = paymentCandidate?.id
   if (!paymentId) {
     throw new MedusaError(
       MedusaError.Types.NOT_FOUND,
@@ -578,8 +627,10 @@ export async function prepareUpiPaymentVerification(
     payment,
     payment_id: paymentId,
     order_total: orderTotal,
+    capture_amount: Number(payment.amount),
     admin_user_id: input.admin_user_id,
     already_verified: false,
+    commission_id: ((order as any).metadata?.commission_id as string) || undefined,
   }
 }
 
@@ -712,6 +763,224 @@ const emitUpiPaymentVerifiedStep = createStep(
   }
 )
 
+export const syncCommissionOnUpiVerificationStep = createStep(
+  "sync-commission-on-upi-verification",
+  async (
+    input: {
+      prepared: PreparedUpiVerification
+      payment: UpiPaymentRecord
+    },
+    { container }
+  ) => {
+    if (input.prepared.already_verified) {
+      return new StepResponse({ synced: false })
+    }
+
+    let commissionService: CommissionModuleService
+    try {
+      commissionService = container.resolve(COMMISSION_MODULE)
+    } catch {
+      return new StepResponse({ synced: false })
+    }
+
+    let commission: any = null
+    if (input.prepared.commission_id) {
+      try {
+        commission = await commissionService.retrieveCommission(
+          input.prepared.commission_id
+        )
+      } catch {
+        commission = null
+      }
+    }
+    if (!commission && input.prepared.payment.order_id) {
+      try {
+        const [commissions] = await commissionService.listAndCountCommissions(
+          { order_id: input.prepared.payment.order_id },
+          { take: 1 }
+        )
+        commission = commissions?.[0]
+      } catch {
+        commission = null
+      }
+    }
+
+    if (!commission) {
+      return new StepResponse({ synced: false })
+    }
+
+    const previousStatus = commission.status
+    const now = new Date()
+    const paymentRef = input.payment.reference_code
+
+    if (commission.status === "awaiting_payment") {
+      try {
+        const query: any = container.resolve(ContainerRegistrationKeys.QUERY)
+        const { data: orders } = await query.graph({
+          entity: "order",
+          fields: ["id", "status", "is_draft_order"],
+          filters: { id: commission.order_id },
+        })
+        const order = orders?.[0]
+        if (order?.is_draft_order || order?.status === OrderStatus.DRAFT) {
+          await convertDraftOrderWorkflow(container).run({
+            input: { id: commission.order_id },
+          })
+        }
+      } catch {
+        // ignore draft conversion failure if already converted
+      }
+
+      const updated = await commissionService.updateCommissions({
+        id: commission.id,
+        status: "in_production",
+        deposit_paid_at: now,
+        deposit_payment_reference: paymentRef,
+        admin_notes: `50% deposit confirmed via UPI (${paymentRef})`,
+      })
+
+      try {
+        await emitCommissionStatusChanged(
+          container,
+          previousStatus as CommissionStatus,
+          updated
+        )
+      } catch {
+        // ignore
+      }
+
+      try {
+        const eventBus: any = container.resolve(Modules.EVENT_BUS)
+        await eventBus.emit({
+          name: "commission.payment_received",
+          data: {
+            id: updated.id,
+            customer_id: updated.customer_id,
+            title: updated.title,
+            quoted_price: updated.quoted_price,
+            currency_code: updated.currency_code,
+            order_id: updated.order_id,
+            payment_reference: paymentRef,
+            paid_at: updated.deposit_paid_at,
+            installment: "deposit",
+            installment_amount: Number(input.payment.amount),
+          },
+        })
+      } catch {
+        // ignore
+      }
+
+      try {
+        await addOrderTransactionStep([
+          {
+            order_id: commission.order_id,
+            amount: Number(input.payment.amount),
+            currency_code: input.payment.currency_code,
+            reference_id: input.prepared.payment_id ?? input.payment.id,
+            reference: "capture",
+          },
+        ])
+      } catch {
+        // ignore
+      }
+
+      return new StepResponse({ synced: true, commission: updated }, {
+        commission_id: commission.id,
+        previous_status: previousStatus,
+        deposit_paid_at: commission.deposit_paid_at,
+        deposit_payment_reference: commission.deposit_payment_reference,
+      })
+    }
+
+    if (commission.status === "awaiting_final_payment") {
+      const updated = await commissionService.updateCommissions({
+        id: commission.id,
+        status: "paid",
+        paid_at: now,
+        payment_reference: paymentRef,
+        final_paid_at: now,
+        final_payment_reference: paymentRef,
+        admin_notes: `Final commission installment confirmed via UPI (${paymentRef})`,
+      })
+
+      try {
+        await emitCommissionStatusChanged(
+          container,
+          previousStatus as CommissionStatus,
+          updated
+        )
+      } catch {
+        // ignore
+      }
+
+      try {
+        const eventBus: any = container.resolve(Modules.EVENT_BUS)
+        await eventBus.emit({
+          name: "commission.payment_received",
+          data: {
+            id: updated.id,
+            customer_id: updated.customer_id,
+            title: updated.title,
+            quoted_price: updated.quoted_price,
+            currency_code: updated.currency_code,
+            order_id: updated.order_id,
+            payment_reference: paymentRef,
+            paid_at: updated.final_paid_at,
+            installment: "balance",
+            installment_amount: Number(input.payment.amount),
+          },
+        })
+      } catch {
+        // ignore
+      }
+
+      try {
+        await addOrderTransactionStep([
+          {
+            order_id: commission.order_id,
+            amount: Number(input.payment.amount),
+            currency_code: input.payment.currency_code,
+            reference_id: input.prepared.payment_id ?? input.payment.id,
+            reference: "capture",
+          },
+        ])
+      } catch {
+        // ignore
+      }
+
+      return new StepResponse({ synced: true, commission: updated }, {
+        commission_id: commission.id,
+        previous_status: previousStatus,
+        paid_at: commission.paid_at,
+        payment_reference: commission.payment_reference,
+        final_paid_at: commission.final_paid_at,
+        final_payment_reference: commission.final_payment_reference,
+      })
+    }
+
+    return new StepResponse({ synced: false })
+  },
+  async (rollback, { container }) => {
+    if (!rollback?.commission_id) return
+    try {
+      const commissionService: CommissionModuleService =
+        container.resolve(COMMISSION_MODULE)
+      await commissionService.updateCommissions({
+        id: rollback.commission_id,
+        status: rollback.previous_status,
+        deposit_paid_at: rollback.deposit_paid_at,
+        deposit_payment_reference: rollback.deposit_payment_reference,
+        paid_at: rollback.paid_at,
+        payment_reference: rollback.payment_reference,
+        final_paid_at: rollback.final_paid_at,
+        final_payment_reference: rollback.final_payment_reference,
+      })
+    } catch {
+      // ignore
+    }
+  }
+)
+
 export const verifyUpiPaymentWorkflow = createWorkflow(
   "verify-upi-payment",
   (input: VerifyUpiPaymentInput) => {
@@ -730,13 +999,17 @@ export const verifyUpiPaymentWorkflow = createWorkflow(
         input: transform(verifiedData, (value) => ({
           payment_id: value.prepared.payment_id!,
           captured_by: value.prepared.admin_user_id,
-          amount: value.prepared.order_total!,
+          amount: value.prepared.capture_amount ?? value.prepared.order_total!,
         })),
       })
       const updated = markUpiPaymentVerifiedStep({
         prepared,
         verified_data: verifiedData,
         capture_result: capture,
+      })
+      syncCommissionOnUpiVerificationStep({
+        prepared,
+        payment: updated,
       })
       return emitUpiPaymentVerifiedStep(updated)
     })

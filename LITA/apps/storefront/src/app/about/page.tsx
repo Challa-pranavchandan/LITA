@@ -48,8 +48,8 @@ const calloutSections: CalloutSection[] = [
     ),
     ctaText: "Discover artwork",
     ctaHref: "/artworks",
-    imageSrc: "/about/original-artwork-perrote.jpg",
-    imageAlt: "Artist hand-painting an original botanical work on canvas",
+    imageSrc: "/about/original-artwork.webp",
+    imageAlt: "Handcrafted original charcoal and graphite artwork on paper",
   },
   {
     title: (

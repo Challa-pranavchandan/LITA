@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { getCustomer } from "@/lib/data/customer";
+import { getCustomerCommissions } from "@/lib/data/commission";
 import { CommissionRequestForm } from "@/components/CommissionRequestForm";
+import { YourCommissionsSection } from "@/components/commission/YourCommissionsSection";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +16,7 @@ export const metadata: Metadata = {
 export default async function CommissionsPage() {
   const customer = await getCustomer();
   const isLoggedIn = Boolean(customer?.id);
+  const commissions = isLoggedIn ? await getCustomerCommissions() : [];
 
   return (
     <div className="w-full bg-white text-[#232629]">
@@ -130,6 +133,12 @@ export default async function CommissionsPage() {
                 <li>Fully insured domestic courier delivery with bespoke crate packaging.</li>
               </ul>
             </div>
+
+            <YourCommissionsSection
+              isLoggedIn={isLoggedIn}
+              commissions={commissions}
+              customer={customer}
+            />
           </div>
 
           <div className="border border-[#E5E5E5] bg-white p-6 sm:p-10 shadow-sm">

@@ -21,10 +21,15 @@ import {
   requireCommissionPaymentInstallment,
   type CommissionInstallment,
 } from "../lib/commission-payment"
+import { buildUpiLink, signProofToken } from "../lib/upi"
+import { UPI_PAYMENT_MODULE } from "../modules/upi-payment"
+import { ensureUpiPaymentRecord } from "./upi-payments"
+import { isUpiManualEnabled } from "../api/store/upi-payments/helpers"
 
 export type CreateCommissionPaymentSessionInput = {
   commission_id: string
   customer_id: string
+  provider_id?: "pp_razorpay_razorpay" | "pp_upimanual_upimanual"
 }
 
 export type CommissionPaymentSessionData = {
@@ -32,6 +37,7 @@ export type CommissionPaymentSessionData = {
   order_id: string
   payment_collection_id: string
   session_id: string
+  provider_id: "pp_razorpay_razorpay" | "pp_upimanual_upimanual"
   razorpay_order_id: string
   amount: number
   currency_code: string
@@ -40,6 +46,15 @@ export type CommissionPaymentSessionData = {
   installment: CommissionInstallment
   installment_amount: number
   total_amount: number
+  reference_code?: string
+  vpa?: string
+  payee_name?: string
+  upi_link?: string
+  proof_token?: string
+  status?: string
+  expires_at?: string
+  has_screenshot?: boolean
+  utr_last4?: string | null
 }
 
 /* ---------------- STEP 1: Validate Commission Ownership & Status ---------------- */
@@ -148,6 +163,9 @@ export const ensureOrderPaymentCollectionStep = createStep(
         "payment_collection.amount",
         "payment_collection.currency_code",
         "payment_collection.metadata",
+        "payment_collection.payment_sessions.id",
+        "payment_collection.payment_sessions.provider_id",
+        "payment_collection.payment_sessions.status",
       ],
       filters: { order_id: commission.order_id },
     })
@@ -215,24 +233,114 @@ export const ensureOrderPaymentCollectionStep = createStep(
   }
 )
 
-/* ---------------- STEP 3: Create Razorpay Payment Session ---------------- */
+/* ---------------- STEP 3: Create Commission Payment Session ---------------- */
 
 type CreateSessionInput = {
   commission: any
   payment_collection: any
   installment: CommissionInstallment
+  provider_id?: "pp_razorpay_razorpay" | "pp_upimanual_upimanual"
 }
 
-export const createCommissionRazorpaySessionStep = createStep(
-  "create-commission-razorpay-session",
+export const createCommissionPaymentSessionStep = createStep(
+  "create-commission-payment-session-step",
   async (
-    { commission, payment_collection, installment }: CreateSessionInput,
+    { commission, payment_collection, installment, provider_id }: CreateSessionInput,
     { container }
   ) => {
     const installmentAmount = getCommissionInstallmentAmount(
       commission.quoted_price,
       installment
     )
+    const activeProviderId = provider_id || "pp_razorpay_razorpay"
+
+    if (activeProviderId === "pp_upimanual_upimanual") {
+      if (!isUpiManualEnabled()) {
+        throw new MedusaError(
+          MedusaError.Types.INVALID_DATA,
+          "Manual UPI payments are currently disabled."
+        )
+      }
+
+      const existingSession = payment_collection.payment_sessions?.find(
+        (s: any) => s.provider_id === "pp_upimanual_upimanual" && s.status !== "canceled"
+      )
+
+      let sessionId = existingSession?.id
+      if (!sessionId) {
+        const { result: session } = await createPaymentSessionsWorkflow(container).run({
+          input: {
+            payment_collection_id: payment_collection.id,
+            provider_id: "pp_upimanual_upimanual",
+            customer_id: commission.customer_id,
+            data: {
+              commission_id: commission.id,
+              commission_installment: installment,
+            },
+          },
+        })
+        sessionId = session.id
+      }
+
+      const paymentModule: any = container.resolve(Modules.PAYMENT)
+      const query: any = container.resolve(ContainerRegistrationKeys.QUERY)
+
+      const { data: sessions } = await query.graph({
+        entity: "payment_session",
+        fields: ["id", "status"],
+        filters: { id: sessionId },
+      })
+      if (sessions?.[0]?.status !== "authorized") {
+        await paymentModule.authorizePaymentSession(sessionId, {})
+      }
+
+      const upiPaymentService: any = container.resolve(UPI_PAYMENT_MODULE)
+      const upiResult = await ensureUpiPaymentRecord(
+        { order_id: commission.order_id },
+        query,
+        upiPaymentService
+      )
+      const upiRecord = upiResult.payment as any
+      const referenceCode = String(upiRecord.reference_code)
+      const upiAmount = Number(upiRecord.amount)
+      const vpa = process.env.UPI_VPA || ""
+      const payeeName = process.env.UPI_PAYEE_NAME || ""
+      const upiLink = buildUpiLink({
+        vpa,
+        name: payeeName,
+        amount: upiAmount,
+        reference: referenceCode,
+      })
+      const proofToken = signProofToken(referenceCode, commission.order_id)
+
+      const output: CommissionPaymentSessionData = {
+        commission_id: commission.id,
+        order_id: commission.order_id,
+        payment_collection_id: payment_collection.id,
+        session_id: sessionId,
+        provider_id: "pp_upimanual_upimanual",
+        razorpay_order_id: "",
+        amount: upiAmount,
+        currency_code: (commission.currency_code || "inr").toUpperCase(),
+        key_id: "",
+        title: commission.title,
+        installment,
+        installment_amount: installmentAmount,
+        total_amount: commission.quoted_price,
+        reference_code: referenceCode,
+        vpa,
+        payee_name: payeeName,
+        upi_link: upiLink,
+        proof_token: proofToken,
+        status: String(upiRecord.status || "awaiting_proof"),
+        expires_at: upiRecord.expires_at instanceof Date ? upiRecord.expires_at.toISOString() : String(upiRecord.expires_at),
+        has_screenshot: Boolean(upiRecord.screenshot_key),
+        utr_last4: typeof upiRecord.utr === "string" ? upiRecord.utr.slice(-4) : null,
+      }
+
+      return new StepResponse(output)
+    }
+
     const providerId = "pp_razorpay_razorpay"
 
     const { result: session } = await createPaymentSessionsWorkflow(container).run({
@@ -256,6 +364,7 @@ export const createCommissionRazorpaySessionStep = createStep(
       order_id: commission.order_id,
       payment_collection_id: payment_collection.id,
       session_id: session.id,
+      provider_id: "pp_razorpay_razorpay",
       razorpay_order_id: razorpayOrderId,
       amount: sessionData.amount || installmentAmount * 100,
       currency_code: (commission.currency_code || "inr").toUpperCase(),
@@ -270,6 +379,8 @@ export const createCommissionRazorpaySessionStep = createStep(
   }
 )
 
+export const createCommissionRazorpaySessionStep = createCommissionPaymentSessionStep
+
 /* ---------------- MAIN WORKFLOW ---------------- */
 
 export const createCommissionPaymentSessionWorkflow = createWorkflow(
@@ -281,10 +392,11 @@ export const createCommissionPaymentSessionWorkflow = createWorkflow(
       commission,
       installment,
     })
-    const sessionData = createCommissionRazorpaySessionStep({
+    const sessionData = createCommissionPaymentSessionStep({
       commission,
       payment_collection: paymentCollection,
       installment,
+      provider_id: input.provider_id,
     })
 
     return new WorkflowResponse(sessionData)

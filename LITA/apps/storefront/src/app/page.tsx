@@ -12,7 +12,7 @@ const STUDIO_SERVICES = [
     title: "Original Works & Prints",
     description:
       "Explore and acquire handcrafted studio originals ready for placement—from textured paintings to intricate line work, mandalas, and limited-run archival prints.",
-    image: "/about/original-artwork-perrote.jpg",
+    image: "/about/original-artwork.webp",
     features: [
       "Studio-signed originals & small-batch editions",
       "Ready-to-hang artisanal framing options",
@@ -66,20 +66,20 @@ export default async function HomePage() {
     <>
       {/* ── Hero Section ── */}
       <section className="relative w-full h-screen min-h-[580px] overflow-hidden">
-        {/* Background image - unoptimized and quality=100 ensures zero compression loss */}
+        {/* Background image - native 4032x3024 WebP ensures razor-sharp detail across Retina/4K displays */}
         <Image
-          src="/hero-bg.jpg"
+          src="/hero-bg.webp"
           alt="Livinin The Art - Handcrafted Artwork"
           fill
           priority
           unoptimized
-          quality={100}
           sizes="100vw"
           className="object-cover object-center w-full h-full"
+          style={{ imageRendering: "auto" }}
           data-hero-img=""
         />
-        {/* Gentle gradient scrim to keep artwork vibrant while ensuring text legibility */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/20 pointer-events-none" />
+        {/* Focused gradient scrim at bottom to ensure text readability while leaving the central artwork pristine and vibrant */}
+        <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none" />
 
         {/* Text content anchored gracefully towards the bottom so the central artwork remains visible */}
         <div className="absolute inset-x-0 bottom-12 md:bottom-16 flex flex-col items-center justify-end text-center px-6 z-10">

@@ -123,4 +123,46 @@ describe("Storefront Commission Payment Flow (B10)", () => {
       "Expected login to return customers to their commission checkout"
     )
   })
+
+  test("Commissions page integrates YourCommissionsSection accordion in specifications column", () => {
+    const pageSource = fs.readFileSync(
+      path.resolve(__dirname, "../app/commissions/page.tsx"),
+      "utf8"
+    )
+    assert.strictEqual(
+      pageSource.includes("YourCommissionsSection"),
+      true,
+      "Expected CommissionsPage to import and render YourCommissionsSection"
+    )
+    assert.strictEqual(
+      pageSource.includes("getCustomerCommissions()"),
+      true,
+      "Expected CommissionsPage to fetch customer commissions"
+    )
+
+    const sectionSource = fs.readFileSync(
+      path.resolve(__dirname, "../components/commission/YourCommissionsSection.tsx"),
+      "utf8"
+    )
+    assert.strictEqual(
+      sectionSource.includes("Your Commissions"),
+      true,
+      "Expected YourCommissionsSection to display 'Your Commissions' header"
+    )
+    assert.strictEqual(
+      sectionSource.includes("toggleExpand"),
+      true,
+      "Expected YourCommissionsSection to support expanding and collapsing details"
+    )
+    assert.strictEqual(
+      sectionSource.includes("CommissionPayButton"),
+      true,
+      "Expected YourCommissionsSection to support paying commission installments"
+    )
+    assert.strictEqual(
+      sectionSource.includes("/account/commissions/"),
+      true,
+      "Expected YourCommissionsSection to provide link to full commission discussion"
+    )
+  })
 })

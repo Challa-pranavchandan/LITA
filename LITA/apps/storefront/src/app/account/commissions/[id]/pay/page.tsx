@@ -7,6 +7,8 @@ import { formatMoney } from "@/lib/format";
 import CommissionPayButton from "@/components/commission/CommissionPayButton";
 import { AcceptCommissionQuoteButton } from "@/components/commission/AcceptCommissionQuoteButton";
 import { CustomerCommissionDiscussion } from "@/components/commission/CustomerCommissionDiscussion";
+import { CommissionPaymentSection } from "@/components/commission/CommissionPaymentSection";
+import { getUpiPayment } from "@/lib/data/upi";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,14 @@ export default async function CommissionPayPage(props: {
     commission.quoted_price && depositAmount !== null
       ? commission.quoted_price - depositAmount
       : null;
+
+  const enableUpiManual =
+    process.env.NEXT_PUBLIC_ENABLE_UPI_MANUAL === "true";
+  const upiResult =
+    enableUpiManual && commission.order_id
+      ? await getUpiPayment(commission.order_id)
+      : { payment: null };
+  const initialUpiPayment = upiResult.payment ?? null;
 
   return (
     <div className="bg-white min-h-[calc(100vh-var(--header-h)-120px)] py-12 md:py-20 px-6 md:px-12">
@@ -248,12 +258,21 @@ export default async function CommissionPayPage(props: {
                   />
                 </div>
               ) : canPay ? (
-                <div className="pt-2">
-                  <CommissionPayButton
+                enableUpiManual ? (
+                  <CommissionPaymentSection
                     commission={commission}
                     customer={customer}
+                    initialUpiPayment={initialUpiPayment}
+                    enableUpiManual={enableUpiManual}
                   />
-                </div>
+                ) : (
+                  <div className="pt-2">
+                    <CommissionPayButton
+                      commission={commission}
+                      customer={customer}
+                    />
+                  </div>
+                )
               ) : commission.status === "in_production" ? (
                 <p className="border border-blue-200 bg-blue-50 p-4 text-xs leading-relaxed text-blue-900">
                   Your 50% upfront payment is confirmed and the studio is creating your artwork. The remaining 50% will be requested when it is ready, before packing.
@@ -267,8 +286,8 @@ export default async function CommissionPayPage(props: {
               )}
 
               <div className="pt-4 border-t border-neutral-200 text-[11px] text-neutral-500 space-y-1">
-                <p>🔒 256-Bit SSL Encrypted Razorpay Checkout</p>
-                <p>✓ UPI, NetBanking, Credit &amp; Debit Cards Accepted</p>
+                <p>🔒 256-Bit SSL Encrypted Checkout</p>
+                <p>✓ UPI (QR &amp; Direct), NetBanking, Credit &amp; Debit Cards</p>
                 <p>✓ Handcrafted studio piece made to bespoke specifications</p>
               </div>
             </div>

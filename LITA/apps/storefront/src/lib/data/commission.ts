@@ -67,6 +67,7 @@ export type CommissionPaymentSessionData = {
   order_id: string;
   payment_collection_id: string;
   session_id: string;
+  provider_id?: "pp_razorpay_razorpay" | "pp_upimanual_upimanual";
   razorpay_order_id: string;
   amount: number;
   currency_code: string;
@@ -75,6 +76,15 @@ export type CommissionPaymentSessionData = {
   installment: "deposit" | "balance";
   installment_amount: number;
   total_amount: number;
+  reference_code?: string;
+  vpa?: string;
+  payee_name?: string;
+  upi_link?: string;
+  proof_token?: string;
+  status?: string;
+  expires_at?: string;
+  has_screenshot?: boolean;
+  utr_last4?: string | null;
 };
 
 /**
@@ -268,7 +278,8 @@ export async function sendCommissionMessage(
  * Initialize a Razorpay payment session for an accepted commission order
  */
 export async function initCommissionPaymentSession(
-  id: string
+  id: string,
+  providerId?: "pp_razorpay_razorpay" | "pp_upimanual_upimanual"
 ): Promise<{
   ok: boolean;
   sessionData?: CommissionPaymentSessionData;
@@ -290,6 +301,7 @@ export async function initCommissionPaymentSession(
       {
         method: "POST",
         headers: authHeaders,
+        body: providerId ? { provider_id: providerId } : {},
       }
     );
 
