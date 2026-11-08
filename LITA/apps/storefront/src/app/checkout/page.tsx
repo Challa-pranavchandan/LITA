@@ -19,10 +19,17 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage() {
-  const customer = await getCustomer();
-  if (customer) await attachCustomerToCart();
+  let [customer, cart, shippingOptions, providers] = await Promise.all([
+    getCustomer().catch(() => null),
+    getCart().catch(() => null),
+    listShippingOptions().catch(() => []),
+    listPaymentProviders().catch(() => []),
+  ]);
 
-  const cart = await getCart();
+  if (customer && cart && cart.customer_id !== customer.id) {
+    await attachCustomerToCart();
+    cart = await getCart();
+  }
 
   if (!cart || !(cart.items ?? []).length) {
     return (
@@ -45,11 +52,6 @@ export default async function CheckoutPage() {
       </div>
     );
   }
-
-  const [shippingOptions, providers] = await Promise.all([
-    listShippingOptions(),
-    listPaymentProviders(),
-  ]);
 
   return (
     <div className="page py-10 md:py-14">
@@ -74,6 +76,7 @@ export default async function CheckoutPage() {
           customerFirstName={customer?.first_name ?? undefined}
           customerLastName={customer?.last_name ?? undefined}
           customerPhone={customer?.phone ?? undefined}
+          customerAddresses={customer?.addresses ?? []}
         />
         <aside className="border-t border-mist pt-8 lg:border-t-0 lg:pt-0">
           <div className="lg:sticky lg:top-24 bg-[#FAF9F7] border border-[#E5E5E5] p-6 sm:p-7">

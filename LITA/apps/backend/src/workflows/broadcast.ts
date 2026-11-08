@@ -261,8 +261,12 @@ export const sendBroadcastStep = createStep(
     let sentCount = 0
     let failedCount = 0
 
-    const batchSize = 10
+    const batchSize = 2
     for (let i = 0; i < recipients.length; i += batchSize) {
+      if (i > 0) {
+        // Sleep 1s between batches of 2 to strictly respect Resend's 2 req/sec rate limit
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
       const batch = recipients.slice(i, i + batchSize)
       await Promise.allSettled(
         batch.map(async (email) => {

@@ -9,9 +9,21 @@ const PRODUCT_FIELDS =
 
 // In-memory cache to prevent repetitive 7+ second roundtrips to remote Supabase DB
 const memoryCache = new Map<string, { data: unknown; expires: number }>();
+const inflight = new Map<string, Promise<unknown>>();
 
 export function clearCatalogCache() {
   memoryCache.clear();
+  inflight.clear();
+}
+
+function singleflight<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key);
+  if (existing) return existing as Promise<T>;
+  const promise = fn().finally(() => {
+    inflight.delete(key);
+  });
+  inflight.set(key, promise);
+  return promise;
 }
 
 function getCached<T>(key: string): T | null {
@@ -31,21 +43,26 @@ export const getRegion = cache(async (): Promise<HttpTypes.StoreRegion | null> =
   const cached = getCached<HttpTypes.StoreRegion>("default_region");
   if (cached) return cached;
 
-  try {
-    const { regions } = await sdk.store.region.list();
-    const region = (
-      regions.find((r) =>
-        r.countries?.some((c) => c.iso_2 === siteConfig.defaultCountry)
-      ) ??
-      regions[0] ??
-      null
-    );
-    if (region) setCached("default_region", region, 300); // 5 min TTL
-    return region;
-  } catch (e) {
-    console.error("[medusa] Could not load regions. Is the backend running and the publishable key set?", (e as Error).message);
-    return null;
-  }
+  return singleflight("default_region", async () => {
+    const doubleCheck = getCached<HttpTypes.StoreRegion>("default_region");
+    if (doubleCheck) return doubleCheck;
+
+    try {
+      const { regions } = await sdk.store.region.list();
+      const region = (
+        regions.find((r) =>
+          r.countries?.some((c) => c.iso_2 === siteConfig.defaultCountry)
+        ) ??
+        regions[0] ??
+        null
+      );
+      if (region) setCached("default_region", region, 300); // 5 min TTL
+      return region;
+    } catch (e) {
+      console.error("[medusa] Could not load regions. Is the backend running and the publishable key set?", (e as Error).message);
+      return null;
+    }
+  });
 });
 
 export type SortKey = "newest" | "price-asc" | "price-desc";
@@ -58,6 +75,7 @@ export type ArtworkQuery = {
   max?: number;
   sort?: SortKey;
   page?: number;
+  limit?: number;
 };
 
 export type ArtworkPage = {
@@ -68,74 +86,79 @@ export type ArtworkPage = {
 };
 
 /**
- * Fetches up to 200 products for the region, then filters, sorts and pages in memory.
- * The Store API has no price-range filter, and an art store catalogue is small enough
- * for this to be fast. Swap for Meilisearch or Algolia if the catalogue grows past ~1,000.
+ * Fetches products for the region, then filters, sorts and pages in memory.
+ * Features singleflight request deduplication to prevent cache stampedes under high concurrency.
  */
 export async function listArtworks(query: ArtworkQuery = {}): Promise<ArtworkPage> {
   const cacheKey = `artworks_${JSON.stringify(query)}`;
   const cached = getCached<ArtworkPage>(cacheKey);
   if (cached) return cached;
 
-  const empty = { products: [], total: 0, page: 1, pageCount: 1 };
-  const region = await getRegion();
-  if (!region) return empty;
+  return singleflight(cacheKey, async () => {
+    const doubleCheck = getCached<ArtworkPage>(cacheKey);
+    if (doubleCheck) return doubleCheck;
 
-  try {
-    const params: Record<string, unknown> = {
-      region_id: region.id,
-      limit: 200,
-      fields: PRODUCT_FIELDS,
-      order: "-created_at",
-    };
-    if (query.q) params.q = query.q;
-    if (query.category) {
-      const cat = await getCategory(query.category);
-      if (!cat) return empty;
-      params.category_id = [cat.id];
+    const empty = { products: [], total: 0, page: 1, pageCount: 1 };
+    const region = await getRegion();
+    if (!region) return empty;
+
+    try {
+      const fetchLimit = query.limit || 200;
+      const params: Record<string, unknown> = {
+        region_id: region.id,
+        limit: fetchLimit,
+        fields: PRODUCT_FIELDS,
+        order: "-created_at",
+      };
+      if (query.q) params.q = query.q;
+      if (query.category) {
+        const cat = await getCategory(query.category);
+        if (!cat) return empty;
+        params.category_id = [cat.id];
+      }
+      if (query.collection) {
+        const col = await getCollection(query.collection);
+        if (!col) return empty;
+        params.collection_id = [col.id];
+      }
+
+      const { products } = await sdk.store.product.list(params);
+      let result = products;
+
+      if (query.min != null || query.max != null) {
+        result = result.filter((p) => {
+          const price = lowestPrice(p)?.amount;
+          if (price == null) return false;
+          if (query.min != null && price < query.min) return false;
+          if (query.max != null && price > query.max) return false;
+          return true;
+        });
+      }
+
+      if (query.sort === "price-asc" || query.sort === "price-desc") {
+        const dir = query.sort === "price-asc" ? 1 : -1;
+        result = [...result].sort(
+          (a, b) => ((lowestPrice(a)?.amount ?? 0) - (lowestPrice(b)?.amount ?? 0)) * dir
+        );
+      }
+
+      const total = result.length;
+      const size = siteConfig.pageSize;
+      const pageCount = Math.max(1, Math.ceil(total / size));
+      const page = Math.min(Math.max(query.page ?? 1, 1), pageCount);
+      const resultPage: ArtworkPage = {
+        products: result.slice((page - 1) * size, page * size),
+        total,
+        page,
+        pageCount,
+      };
+      setCached(cacheKey, resultPage, 120); // 2 min TTL
+      return resultPage;
+    } catch (e) {
+      console.error("[medusa] Could not load products:", (e as Error).message);
+      return empty;
     }
-    if (query.collection) {
-      const col = await getCollection(query.collection);
-      if (!col) return empty;
-      params.collection_id = [col.id];
-    }
-
-    const { products } = await sdk.store.product.list(params);
-    let result = products;
-
-    if (query.min != null || query.max != null) {
-      result = result.filter((p) => {
-        const price = lowestPrice(p)?.amount;
-        if (price == null) return false;
-        if (query.min != null && price < query.min) return false;
-        if (query.max != null && price > query.max) return false;
-        return true;
-      });
-    }
-
-    if (query.sort === "price-asc" || query.sort === "price-desc") {
-      const dir = query.sort === "price-asc" ? 1 : -1;
-      result = [...result].sort(
-        (a, b) => ((lowestPrice(a)?.amount ?? 0) - (lowestPrice(b)?.amount ?? 0)) * dir
-      );
-    }
-
-    const total = result.length;
-    const size = siteConfig.pageSize;
-    const pageCount = Math.max(1, Math.ceil(total / size));
-    const page = Math.min(Math.max(query.page ?? 1, 1), pageCount);
-    const resultPage: ArtworkPage = {
-      products: result.slice((page - 1) * size, page * size),
-      total,
-      page,
-      pageCount,
-    };
-    setCached(cacheKey, resultPage, 60);
-    return resultPage;
-  } catch (e) {
-    console.error("[medusa] Could not load products:", (e as Error).message);
-    return empty;
-  }
+  });
 }
 
 import { CURATED_ARTWORKS, curatedToStoreProduct } from "@/lib/data/curated-artworks";
@@ -150,40 +173,45 @@ export async function getProduct(
   // Check curated catalogue first if handle matches directly
   if (CURATED_ARTWORKS[handle]) {
     const curated = curatedToStoreProduct(CURATED_ARTWORKS[handle]);
-    setCached(cacheKey, curated, 120);
+    setCached(cacheKey, curated, 180);
     return curated;
   }
 
-  const region = await getRegion();
-  if (region) {
-    try {
-      const { products } = await sdk.store.product.list({
-        handle,
-        region_id: region.id,
-        limit: 1,
-        fields: PRODUCT_FIELDS + ",*images",
-      });
-      const product = products[0] ?? null;
-      if (product) {
-        setCached(cacheKey, product, 60);
-        return product;
+  return singleflight(cacheKey, async () => {
+    const doubleCheck = getCached<HttpTypes.StoreProduct>(cacheKey);
+    if (doubleCheck) return doubleCheck;
+
+    const region = await getRegion();
+    if (region) {
+      try {
+        const { products } = await sdk.store.product.list({
+          handle,
+          region_id: region.id,
+          limit: 1,
+          fields: PRODUCT_FIELDS + ",*images",
+        });
+        const product = products[0] ?? null;
+        if (product) {
+          setCached(cacheKey, product, 180);
+          return product;
+        }
+      } catch {
+        // Fall through to curated fallback check
       }
-    } catch {
-      // Fall through to curated fallback check
     }
-  }
 
-  // Check curated catalogue case-insensitively or by fuzzy match
-  const foundCurated = Object.values(CURATED_ARTWORKS).find(
-    (c) => c.handle.toLowerCase() === handle.toLowerCase()
-  );
-  if (foundCurated) {
-    const curated = curatedToStoreProduct(foundCurated);
-    setCached(cacheKey, curated, 120);
-    return curated;
-  }
+    // Check curated catalogue case-insensitively or by fuzzy match
+    const foundCurated = Object.values(CURATED_ARTWORKS).find(
+      (c) => c.handle.toLowerCase() === handle.toLowerCase()
+    );
+    if (foundCurated) {
+      const curated = curatedToStoreProduct(foundCurated);
+      setCached(cacheKey, curated, 180);
+      return curated;
+    }
 
-  return null;
+    return null;
+  });
 }
 
 /** Other works from the same collection, falling back to the newest works. */
@@ -223,16 +251,21 @@ export const listCategories = cache(
     const cached = getCached<HttpTypes.StoreProductCategory[]>("categories_list");
     if (cached) return cached;
 
-    try {
-      const { product_categories } = await sdk.store.category.list({
-        limit: 100,
-        parent_category_id: "null",
-      });
-      if (product_categories) setCached("categories_list", product_categories, 120);
-      return product_categories;
-    } catch {
-      return [];
-    }
+    return singleflight("categories_list", async () => {
+      const existing = getCached<HttpTypes.StoreProductCategory[]>("categories_list");
+      if (existing) return existing;
+
+      try {
+        const { product_categories } = await sdk.store.category.list({
+          limit: 100,
+          parent_category_id: "null",
+        });
+        if (product_categories) setCached("categories_list", product_categories, 300); // 5 min TTL
+        return product_categories;
+      } catch {
+        return [];
+      }
+    });
   }
 );
 
@@ -297,24 +330,29 @@ export const listCollections = cache(
     const cached = getCached<HttpTypes.StoreCollection[]>("collections_list");
     if (cached) return cached;
 
-    try {
-      const { collections } = await sdk.store.collection.list({ limit: 100 });
-      if (collections.length > 0) {
-        setCached("collections_list", collections, 120);
-        return collections;
+    return singleflight("collections_list", async () => {
+      const existing = getCached<HttpTypes.StoreCollection[]>("collections_list");
+      if (existing) return existing;
+
+      try {
+        const { collections } = await sdk.store.collection.list({ limit: 100 });
+        if (collections.length > 0) {
+          setCached("collections_list", collections, 300); // 5 min TTL
+          return collections;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-    const fallback = CURATED_COLLECTIONS.map((c) => ({
-      id: `col_${c.handle}`,
-      title: c.title,
-      handle: c.handle,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })) as HttpTypes.StoreCollection[];
-    setCached("collections_list", fallback, 120);
-    return fallback;
+      const fallback = CURATED_COLLECTIONS.map((c) => ({
+        id: `col_${c.handle}`,
+        title: c.title,
+        handle: c.handle,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })) as HttpTypes.StoreCollection[];
+      setCached("collections_list", fallback, 300);
+      return fallback;
+    });
   }
 );
 

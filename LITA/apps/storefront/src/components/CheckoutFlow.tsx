@@ -238,7 +238,20 @@ export function CheckoutFlow({
   }
 
   const currency = cart.currency_code;
-  const selectedShipping = cart.shipping_methods?.[0]?.shipping_option_id;
+  const [optimisticShippingId, setOptimisticShippingId] = useState<string | null>(
+    () => cart.shipping_methods?.[0]?.shipping_option_id ?? null
+  );
+  const [isUpdatingShipping, setIsUpdatingShipping] = useState(false);
+  const selectedShipping =
+    optimisticShippingId ?? cart.shipping_methods?.[0]?.shipping_option_id;
+
+  useEffect(() => {
+    const serverShippingId = cart.shipping_methods?.[0]?.shipping_option_id;
+    if (serverShippingId) {
+      setOptimisticShippingId(serverShippingId);
+    }
+  }, [cart.shipping_methods]);
+
   const usable = providers.filter(
     (provider) =>
       isSupportedProvider(provider.id) &&
@@ -428,15 +441,26 @@ export function CheckoutFlow({
   }
 
   function pickShipping(optionId: string) {
+    if (optionId === selectedShipping && !error) return;
     setError(null);
+    setOptimisticShippingId(optionId);
+    setIsUpdatingShipping(true);
     startTransition(async () => {
       const res = await chooseShipping(optionId);
-      if (!res.ok) setError(res.error);
-      else router.refresh();
+      setIsUpdatingShipping(false);
+      if (!res.ok) {
+        setOptimisticShippingId(
+          cart.shipping_methods?.[0]?.shipping_option_id ?? null
+        );
+        setError(res.error);
+      } else {
+        router.refresh();
+      }
     });
   }
 
   function toPayment() {
+    if (isUpdatingShipping) return;
     if (!selectedShipping) return setError("Choose a delivery option to continue.");
     setError(null);
     setStep("payment");
@@ -661,27 +685,61 @@ export function CheckoutFlow({
 
       {step === "shipping" && (
         <div className="space-y-5 pt-6">
-          <h2 className="text-xl">How should it travel?</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl">How should it travel?</h2>
+            {isUpdatingShipping && (
+              <span className="flex items-center gap-1.5 text-xs text-graphite">
+                <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Updating delivery totals…
+              </span>
+            )}
+          </div>
           {shippingOptions.length === 0 ? (
             <p role="alert" className="border border-dust bg-wall p-4">
               No delivery options are available for this address yet. Check the address, or <a className="link" href="/contact">contact the studio</a> to arrange delivery.
             </p>
           ) : (
-            <fieldset className="space-y-2" disabled={pending}>
+            <fieldset className="space-y-2">
               <legend className="sr-only">Delivery options</legend>
-              {shippingOptions.map((o) => (
-                <label key={o.id} className={`flex cursor-pointer items-center justify-between gap-4 border p-4 ${selectedShipping === o.id ? "border-ink bg-wall" : "border-dust hover:border-graphite"}`}>
-                  <span className="flex items-center gap-3">
-                    <input type="radio" name="shipping" checked={selectedShipping === o.id} onChange={() => pickShipping(o.id)} className="accent-[#2A3590]" />
-                    <span>{o.name}</span>
-                  </span>
-                  <span className="tabular-nums">{o.amount === 0 ? "Free" : o.amount != null ? formatMoney(o.amount, currency) : "Calculated"}</span>
-                </label>
-              ))}
+              {shippingOptions.map((o) => {
+                const isSelected = selectedShipping === o.id;
+                return (
+                  <label
+                    key={o.id}
+                    className={`flex cursor-pointer items-center justify-between gap-4 border p-4 transition-colors ${
+                      isSelected ? "border-ink bg-wall" : "border-dust hover:border-graphite"
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="shipping"
+                        checked={isSelected}
+                        onChange={() => pickShipping(o.id)}
+                        className="accent-[#2A3590]"
+                      />
+                      <span>{o.name}</span>
+                    </span>
+                    <span className="tabular-nums">
+                      {o.amount === 0 ? "Free" : o.amount != null ? formatMoney(o.amount, currency) : "Calculated"}
+                    </span>
+                  </label>
+                );
+              })}
             </fieldset>
           )}
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-          <button type="button" onClick={toPayment} disabled={pending || !selectedShipping} className="btn-solid">Continue to payment</button>
+          <button
+            type="button"
+            onClick={toPayment}
+            disabled={pending || isUpdatingShipping || !selectedShipping}
+            className="btn-solid"
+          >
+            {isUpdatingShipping ? "Updating totals…" : "Continue to payment"}
+          </button>
         </div>
       )}
 

@@ -58,7 +58,7 @@ const STUDIO_SERVICES = [
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const { products } = await listArtworks({});
+  const { products } = await listArtworks({ limit: 12 });
 
   const recent = products.slice(0, 9);
 
@@ -66,13 +66,12 @@ export default async function HomePage() {
     <>
       {/* ── Hero Section ── */}
       <section className="relative w-full h-screen min-h-[580px] overflow-hidden">
-        {/* Background image - native 4032x3024 WebP ensures razor-sharp detail across Retina/4K displays */}
+        {/* Background image - responsive WebP with Next.js image optimization */}
         <Image
           src="/hero-bg.webp"
           alt="Livinin The Art - Handcrafted Artwork"
           fill
           priority
-          unoptimized
           sizes="100vw"
           className="object-cover object-center w-full h-full"
           style={{ imageRendering: "auto" }}

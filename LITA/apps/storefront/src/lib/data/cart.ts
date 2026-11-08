@@ -263,12 +263,12 @@ export async function saveAddress(input: AddressInput): Promise<ActionResult> {
         delivery_instructions: delivery_instructions || "",
       },
     });
-    refresh();
+    revalidatePath("/checkout");
     return { ok: true };
   } catch (e) {
     if (isCartNotFoundError(e)) {
       await clearStaleCart();
-      refresh();
+      revalidatePath("/checkout");
       return { ok: false, error: "Your bag session expired. Please refresh the page." };
     }
     return { ok: false, error: message(e) };
@@ -295,12 +295,12 @@ export async function chooseShipping(optionId: string): Promise<ActionResult> {
   if (!id) return { ok: false, error: "Your bag is empty." };
   try {
     await sdk.store.cart.addShippingMethod(id, { option_id: optionId });
-    refresh();
+    revalidatePath("/checkout");
     return { ok: true };
   } catch (e) {
     if (isCartNotFoundError(e)) {
       await clearStaleCart();
-      refresh();
+      revalidatePath("/checkout");
       return { ok: false, error: "Your bag session expired. Please refresh the page." };
     }
     return { ok: false, error: message(e) };
@@ -473,12 +473,12 @@ export async function setShippingMethod({
   if (!id) return { ok: false, error: "Your bag is empty." };
   try {
     await sdk.store.cart.addShippingMethod(id, { option_id: shippingMethodId });
-    refresh();
+    revalidatePath("/checkout");
     return { ok: true };
   } catch (e) {
     if (isCartStaleOrNotFoundError(e)) {
       await clearStaleCart();
-      refresh();
+      revalidatePath("/checkout");
       return { ok: false, error: "Your bag session expired. Please refresh the page." };
     }
     return { ok: false, error: message(e) };
