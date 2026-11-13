@@ -13,6 +13,8 @@ import {
 } from "@/lib/data/upi";
 import { isValidUtr } from "@/lib/upi-validation";
 import { Turnstile } from "@/components/Turnstile";
+import { useRouter } from "next/navigation";
+import { buyAgain } from "@/lib/data/cart";
 
 const ALLOWED_SCREENSHOT_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SCREENSHOT_SIZE = 5 * 1024 * 1024;
@@ -20,24 +22,45 @@ const MAX_SCREENSHOT_SIZE = 5 * 1024 * 1024;
 type UpiPayPanelProps = {
   orderId: string;
   initialPayment: UpiPaymentInstructions;
+  orderItems?: Array<{ variant_id?: string | null; quantity: number }> | null;
 };
 
 function remainingTime(expiresAt: string, now: number): string {
   const remaining = Math.max(0, new Date(expiresAt).getTime() - now);
   const totalSeconds = Math.floor(remaining / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-
-  if (days) return `${days}d ${hours}h ${minutes}m`;
-  return `${hours}h ${minutes}m ${seconds}s`;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(minutes)}:${pad(seconds)}`;
 }
 
 export function UpiPayPanel({
   orderId,
   initialPayment,
+  orderItems,
 }: UpiPayPanelProps) {
+  const router = useRouter();
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const handleRetryPayment = async () => {
+    setIsRetrying(true);
+    try {
+      const items = (orderItems || []).map((i) => ({
+        variantId: i.variant_id,
+        quantity: i.quantity || 1,
+      }));
+      const res = await buyAgain(items);
+      if (res.ok) {
+        router.push("/checkout");
+      } else {
+        router.push("/cart");
+      }
+    } catch {
+      router.push("/cart");
+    } finally {
+      setIsRetrying(false);
+    }
+  };
   const [payment, setPayment] = useState(initialPayment);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [isMobile, setIsMobile] = useState(false);
@@ -266,7 +289,7 @@ export function UpiPayPanel({
         </div>
         {!isTerminal && (
           <p className="mt-2 text-sm text-graphite" aria-live="polite">
-            Payment window: {remainingTime(payment.expires_at, now)}
+            Pay within {remainingTime(payment.expires_at, now)}
           </p>
         )}
       </div>
@@ -292,14 +315,23 @@ export function UpiPayPanel({
       )}
 
       {status === "expired" && (
-        <div role="status" aria-live="polite" className="space-y-3 border border-dust p-4">
-          <p>
-            The payment window has expired. This order can no longer be paid
-            through this UPI request.
+        <div role="status" aria-live="polite" className="space-y-4 border border-dust p-5 bg-[#faf8f5]">
+          <p className="font-medium text-ink">
+            This UPI request has expired. This order can no longer be paid through this UPI request.
           </p>
-          <Link href="/artworks" className="link">
-            Browse artworks
-          </Link>
+          <div className="flex flex-wrap items-center gap-4 pt-1">
+            <button
+              type="button"
+              onClick={handleRetryPayment}
+              disabled={isRetrying}
+              className="btn-solid text-xs uppercase tracking-wider"
+            >
+              {isRetrying ? "Preparing bag…" : "Retry payment"}
+            </button>
+            <Link href="/artworks" className="link text-xs uppercase tracking-wider text-graphite">
+              Browse artworks
+            </Link>
+          </div>
         </div>
       )}
 

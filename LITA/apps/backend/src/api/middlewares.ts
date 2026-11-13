@@ -19,6 +19,7 @@ import {
   CommissionMessageSchema,
   CommissionPaySchema,
   CommissionUploadUrlSchema,
+  CancelCommissionSchema,
   CreateCommissionSchema,
   UpdateCommissionSchema,
 } from "./schemas/commission"
@@ -386,6 +387,11 @@ export default defineMiddlewares({
       matcher: "/admin/commissions/:id",
       method: "POST",
       middlewares: [validateAndTransformBody(UpdateCommissionSchema)],
+    },
+    {
+      matcher: "/admin/commissions/:id/cancel",
+      method: "POST",
+      middlewares: [validateAndTransformBody(CancelCommissionSchema)],
     },
     {
       matcher: "/admin/commissions/:id/messages",

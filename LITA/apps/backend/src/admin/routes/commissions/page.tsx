@@ -109,6 +109,11 @@ const adminStatusTransitions: Record<string, string[]> = {
   new: ["in_discussion", "rejected", "cancelled"],
   in_discussion: ["quoted", "rejected", "cancelled"],
   quoted: ["in_discussion", "rejected", "cancelled"],
+  accepted: ["cancelled"],
+  awaiting_payment: ["cancelled"],
+  in_production: ["cancelled"],
+  awaiting_final_payment: ["cancelled"],
+  converted: ["cancelled"],
 }
 
 const CommissionsPage = () => {
@@ -123,6 +128,8 @@ const CommissionsPage = () => {
   const [editAdminNotes, setEditAdminNotes] = useState<string>("")
   const [newMessageBody, setNewMessageBody] = useState<string>("")
   const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null)
+  const [showCancelDialog, setShowCancelDialog] = useState<boolean>(false)
+  const [cancelReason, setCancelReason] = useState<string>("")
 
   // Fetch list of commissions
   const { data, isLoading } = useQuery({
@@ -158,6 +165,8 @@ const CommissionsPage = () => {
     setEditAdminNotes(com.admin_notes || "")
     setNewMessageBody("")
     setSelectedImagePreview(null)
+    setShowCancelDialog(false)
+    setCancelReason("")
   }
 
   // Update commission status, quote price, admin notes
@@ -245,6 +254,38 @@ const CommissionsPage = () => {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to request final payment")
+    },
+  })
+
+  // Cancel commission (and linked Medusa order if converted)
+  const cancelMutation = useMutation({
+    mutationFn: (payload: { reason?: string }) =>
+      sdk.client.fetch<{
+        success: boolean
+        message: string
+        commission: Commission
+        order?: any
+      }>(`/admin/commissions/${selectedCommissionId}/cancel`, {
+        method: "POST",
+        body: payload,
+      }),
+    onSuccess: (res) => {
+      toast.success(
+        res.order
+          ? "Commission order cancelled successfully"
+          : "Commission cancelled successfully"
+      )
+      setShowCancelDialog(false)
+      setCancelReason("")
+      qc.invalidateQueries({ queryKey: ["commissions"] })
+      qc.invalidateQueries({ queryKey: ["commission-detail", selectedCommissionId] })
+      if (res.commission) {
+        setEditStatus(res.commission.status)
+        setEditAdminNotes(res.commission.admin_notes || "")
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to cancel commission order")
     },
   })
 
@@ -375,6 +416,7 @@ const CommissionsPage = () => {
                         {item.images.length} {item.images.length === 1 ? "reference image" : "reference images"}
                       </div>
                     ) : null}
+
                   </Table.Cell>
 
                   <Table.Cell className="text-xs text-ui-fg-subtle">
@@ -528,6 +570,21 @@ const CommissionsPage = () => {
                   Convert to Order
                 </Button>
               ) : null}
+
+              {selectedCommission.status !== "cancelled" &&
+                selectedCommission.status !== "rejected" &&
+                selectedCommission.status !== "paid" && (
+                  <Button
+                    size="small"
+                    variant="danger"
+                    onClick={() => {
+                      setCancelReason("")
+                      setShowCancelDialog(true)
+                    }}
+                  >
+                    {selectedCommission.order_id ? "Cancel Order" : "Cancel Commission"}
+                  </Button>
+                )}
 
               <Button
                 size="small"
@@ -827,6 +884,67 @@ const CommissionsPage = () => {
               </div>
             </div>
           </div>
+{/* Cancel Commission Confirmation Modal */}
+          {showCancelDialog && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="cancel-dialog-title"
+                className="bg-ui-bg-base border border-ui-border-base rounded-lg p-6 max-w-md w-full shadow-elevation-modal space-y-4"
+              >
+                <div>
+                  <Heading id="cancel-dialog-title" level="h2" className="text-base font-semibold text-ui-fg-base">
+                    {selectedCommission.order_id ? "Cancel Commission Order" : "Cancel Commission Request"}
+                  </Heading>
+                  <Text size="small" className="text-ui-fg-subtle mt-1">
+                    {selectedCommission.order_id
+                      ? `Are you sure you want to cancel the commission for "${selectedCommission.title}"? This will cancel the associated Medusa order (${selectedCommission.order_id}) and update the status to Cancelled. The client will be notified.`
+                      : `Are you sure you want to cancel the commission for "${selectedCommission.title}"? The status will be updated to Cancelled and the client will be notified.`}
+                  </Text>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-ui-fg-muted block">
+                    Cancellation Reason (Optional)
+                  </label>
+                  <Textarea
+                    rows={3}
+                    placeholder="Enter reason for cancellation (saved in admin notes and sent in notification)..."
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-ui-border-base">
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={cancelMutation.isPending}
+                    onClick={() => {
+                      setShowCancelDialog(false)
+                      setCancelReason("")
+                    }}
+                  >
+                    Keep Commission
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="danger"
+                    isLoading={cancelMutation.isPending}
+                    disabled={cancelMutation.isPending}
+                    onClick={() => {
+                      cancelMutation.mutate({
+                        reason: cancelReason.trim() || undefined,
+                      })
+                    }}
+                  >
+                    Confirm Cancellation
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </Container>

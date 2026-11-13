@@ -136,6 +136,10 @@ export function CharcoalPortraitRequestForm({
       setFormError("Please wait for reference images to finish uploading.")
       return
     }
+    if (uploads.some((upload) => upload.status === "error")) {
+      setFormError("One or more reference images failed to upload. Please remove or re-upload them.")
+      return
+    }
 
     const images: CommissionImage[] = uploads
       .filter((upload) => upload.status === "done" && upload.key)
@@ -145,6 +149,11 @@ export function CharcoalPortraitRequestForm({
         mime: upload.file.type,
         size: upload.file.size,
       }))
+
+    if (images.length === 0) {
+      setFormError("Please upload at least one reference photo for your portrait.")
+      return
+    }
 
     startTransition(async () => {
       const subject = portraitFor.trim()
@@ -298,9 +307,9 @@ export function CharcoalPortraitRequestForm({
 
       <div>
         <label className="label">
-          Reference photos{" "}
+          Reference photos <span className="text-red-500">*</span>{" "}
           <span className="text-xs text-graphite/60">
-            (Optional · up to 5 images · JPG, PNG, WEBP · 10MB each)
+            (Required · at least 1 image, up to 5 · JPG, PNG, WEBP · 10MB each)
           </span>
         </label>
         <button
@@ -321,7 +330,9 @@ export function CharcoalPortraitRequestForm({
           <span className="block text-sm font-medium text-ink">
             {uploads.length >= 5
               ? "Maximum 5 reference images reached"
-              : "Choose reference photos"}
+              : uploads.length > 0
+                ? "Add more reference photos"
+                : "Choose reference photos"}
           </span>
           <span className="mt-1 block text-xs text-graphite">
             Upload the photo(s) you would like the artist to use for your portrait.

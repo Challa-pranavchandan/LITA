@@ -9,6 +9,7 @@ import {
   type CommissionStatus,
 } from "../../../../lib/commission-status"
 import { CommissionIdSchema } from "../../../schemas/commission"
+import { cancelCommissionWorkflow } from "../../../../workflows/cancel-commission"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const parsedId = CommissionIdSchema.safeParse(req.params.id)
@@ -70,6 +71,20 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 
   const { status, quoted_price, currency_code, admin_notes } = req.body as any
+
+  if (status === "cancelled" && status !== existing.status) {
+    try {
+      const { result } = await cancelCommissionWorkflow(req.scope).run({
+        input: {
+          commission_id: id,
+          reason: admin_notes,
+        },
+      })
+      return res.status(200).json({ commission: result.commission })
+    } catch (error: any) {
+      return res.status(400).json({ message: error.message })
+    }
+  }
 
   const updatePayload: any = { id }
 

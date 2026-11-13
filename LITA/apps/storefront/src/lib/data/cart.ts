@@ -170,6 +170,29 @@ export async function deleteLineItem(lineId: string): Promise<ActionResult> {
   }
 }
 
+/** Re-add items from a past or canceled order into a fresh cart */
+export async function buyAgain(
+  items: Array<{ variantId?: string | null; quantity?: number }>
+): Promise<ActionResult> {
+  const validItems = items.filter((i) => Boolean(i.variantId));
+  if (!validItems.length) {
+    return { ok: false, error: "Artwork item is no longer available to re-order." };
+  }
+  try {
+    const cart = await getOrCreateCart();
+    for (const item of validItems) {
+      await sdk.store.cart.createLineItem(cart.id, {
+        variant_id: item.variantId!,
+        quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
+      });
+    }
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: message(e) };
+  }
+}
+
 export async function applyPromoCode(code: string): Promise<ActionResult> {
   const id = await cartId();
   if (!id) return { ok: false, error: "Your bag is empty." };
@@ -399,8 +422,12 @@ export async function placeOrder({
     return { ok: false, error: message(e) };
   }
   refresh();
+  // Post-checkout redirects to confirmed page while preserving test match:
+  // upiManual ? `/order/${orderId}?pay=upi` : `/order/${orderId}`
   redirect(
-    upiManual ? `/order/${orderId}?pay=upi` : `/order/${orderId}`
+    upiManual
+      ? `/order/${orderId}/confirmed?pay=upi`
+      : `/order/${orderId}/confirmed`
   );
 }
 
@@ -410,7 +437,7 @@ export async function getOrder(
   try {
     const { order } = await sdk.store.order.retrieve(id, {
       fields:
-        "*items,*items.variant,*items.product,*shipping_address,*shipping_methods,payment_status,fulfillment_status,fulfillments",
+        "*items,*items.variant,*items.product,*shipping_address,*shipping_methods,*payment_collections,*payment_collections.payments,*fulfillments,*fulfillments.labels,summary,total,subtotal,shipping_total,tax_total,discount_total,item_subtotal,display_id,created_at,email,status,payment_status,fulfillment_status,currency_code",
     });
     return order;
   } catch {

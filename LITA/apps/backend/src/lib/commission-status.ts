@@ -23,10 +23,10 @@ const allowedTransitions: Record<CommissionStatus, CommissionStatus[]> = {
   quoted: ["in_discussion", "accepted", "rejected", "cancelled"],
   accepted: ["awaiting_payment", "cancelled"],
   awaiting_payment: ["in_production", "cancelled"],
-  in_production: ["awaiting_final_payment"],
-  awaiting_final_payment: ["paid"],
+  in_production: ["awaiting_final_payment", "cancelled"],
+  awaiting_final_payment: ["paid", "cancelled"],
   paid: [],
-  converted: [],
+  converted: ["cancelled"],
   rejected: [],
   cancelled: [],
 }
@@ -41,6 +41,30 @@ export function assertCommissionTransition(
       `Commission cannot transition from '${current}' to '${next}'.`
     )
   }
+}
+
+export function assertCommissionCanCancel(commission: {
+  status: CommissionStatus
+}): void {
+  if (commission.status === "cancelled") {
+    throw new MedusaError(
+      MedusaError.Types.CONFLICT,
+      "Commission is already cancelled."
+    )
+  }
+  if (commission.status === "paid") {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Cannot cancel a commission that has already been fully paid and completed."
+    )
+  }
+  if (commission.status === "rejected") {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      "Commission was already rejected and cannot be cancelled."
+    )
+  }
+  assertCommissionTransition(commission.status, "cancelled")
 }
 
 export function assertCommissionCanConvert(commission: {

@@ -25,7 +25,6 @@ export function CommissionRequestForm({
   const [title, setTitle] = useState("");
   const [medium, setMedium] = useState("Charcoal on Paper");
   const [size, setSize] = useState("Medium (A3 - 11.7 x 16.5 in)");
-  const [budget, setBudget] = useState("");
   const [deadline, setDeadline] = useState("");
   const [idea, setIdea] = useState("");
   const [requirements, setRequirements] = useState("");
@@ -149,14 +148,12 @@ export function CommissionRequestForm({
       }));
 
     startTransition(async () => {
-      const cleanBudget = budget ? parseInt(budget.replace(/[^\d]/g, ""), 10) : undefined;
       const res = await createCommissionRequest({
         title: title.trim(),
         idea: idea.trim(),
         requirements: requirements.trim() || undefined,
         medium,
         size,
-        budget: cleanBudget && !isNaN(cleanBudget) ? cleanBudget : undefined,
         deadline: deadline || undefined,
         images: readyImages,
       });
@@ -193,7 +190,6 @@ export function CommissionRequestForm({
               setTitle("");
               setIdea("");
               setRequirements("");
-              setBudget("");
               setDeadline("");
               setUploads([]);
               setSubmitted(false);
@@ -281,33 +277,18 @@ export function CommissionRequestForm({
         </div>
       </div>
 
-      {/* Budget & Target Deadline */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="commission-budget" className="label">
-            Budget Range in ₹ INR <span className="text-graphite/60 text-xs">(optional)</span>
-          </label>
-          <input
-            id="commission-budget"
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-            placeholder="e.g. 25,000 or 50,000"
-            className="field"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="commission-deadline" className="label">
-            Target Completion Date <span className="text-graphite/60 text-xs">(optional)</span>
-          </label>
-          <input
-            id="commission-deadline"
-            type="date"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-            className="field"
-          />
-        </div>
+      {/* Target Deadline */}
+      <div>
+        <label htmlFor="commission-deadline" className="label">
+          Target Completion Date <span className="text-graphite/60 text-xs">(optional)</span>
+        </label>
+        <input
+          id="commission-deadline"
+          type="date"
+          value={deadline}
+          onChange={(e) => setDeadline(e.target.value)}
+          className="field"
+        />
       </div>
 
       {/* Artistic Vision & Concept Description */}

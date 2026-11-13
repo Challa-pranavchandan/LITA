@@ -1,5 +1,6 @@
 import { MedusaError } from "@medusajs/framework/utils"
 import {
+  assertCommissionCanCancel,
   assertCommissionCanConvert,
   assertCommissionPaymentCompletion,
   assertCommissionTransition,
@@ -24,6 +25,9 @@ describe("commission status state machine", () => {
     ["in_production", "awaiting_final_payment"],
     ["awaiting_final_payment", "paid"],
     ["awaiting_payment", "cancelled"],
+    ["in_production", "cancelled"],
+    ["awaiting_final_payment", "cancelled"],
+    ["converted", "cancelled"],
   ] as const)("allows %s -> %s", (current, next) => {
     expect(() => assertCommissionTransition(current, next)).not.toThrow()
   })
@@ -43,6 +47,39 @@ describe("commission status state machine", () => {
     ["converted", "awaiting_payment"],
   ] as const)("rejects %s -> %s", (current, next) => {
     expect(() => assertCommissionTransition(current, next)).toThrow(MedusaError)
+  })
+})
+
+describe("commission cancellation guards", () => {
+  it.each([
+    "new",
+    "in_discussion",
+    "quoted",
+    "accepted",
+    "awaiting_payment",
+    "in_production",
+    "awaiting_final_payment",
+    "converted",
+  ] as const)("permits cancellation for status '%s'", (status) => {
+    expect(() => assertCommissionCanCancel({ status })).not.toThrow()
+  })
+
+  it("rejects cancellation if already cancelled", () => {
+    expect(() => assertCommissionCanCancel({ status: "cancelled" })).toThrow(
+      /already cancelled/
+    )
+  })
+
+  it("rejects cancellation if already paid and completed", () => {
+    expect(() => assertCommissionCanCancel({ status: "paid" })).toThrow(
+      /already been fully paid/
+    )
+  })
+
+  it("rejects cancellation if rejected", () => {
+    expect(() => assertCommissionCanCancel({ status: "rejected" })).toThrow(
+      /already rejected/
+    )
   })
 })
 

@@ -54,6 +54,7 @@ interface CommissionPayButtonProps {
   } | null;
   onSuccess?: () => void;
   className?: string;
+  fullWidth?: boolean;
 }
 
 export function CommissionPayButton({
@@ -61,6 +62,7 @@ export function CommissionPayButton({
   customer,
   onSuccess,
   className = "",
+  fullWidth = false,
 }: CommissionPayButtonProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -241,7 +243,9 @@ export function CommissionPayButton({
             type="button"
             onClick={handlePay}
             disabled={loading}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#5f2f3c] text-white text-xs uppercase tracking-wider font-medium hover:bg-[#4a242f] transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
+            className={`${
+              fullWidth ? "w-full py-3.5 rounded-lg text-sm" : "w-full sm:w-auto px-5 py-2.5 rounded-full text-xs"
+            } bg-[#5f2f3c] text-white uppercase tracking-wider font-medium hover:bg-[#4a242f] transition-all disabled:opacity-50 cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5f2f3c] focus-visible:ring-offset-2 flex items-center justify-center gap-2`}
           >
             {loading
               ? statusState === "confirming"

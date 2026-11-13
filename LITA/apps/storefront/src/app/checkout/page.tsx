@@ -19,12 +19,13 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage() {
-  let [customer, cart, shippingOptions, providers] = await Promise.all([
+  const [customer, initialCart, shippingOptions, providers] = await Promise.all([
     getCustomer().catch(() => null),
     getCart().catch(() => null),
     listShippingOptions().catch(() => []),
     listPaymentProviders().catch(() => []),
   ]);
+  let cart = initialCart;
 
   if (customer && cart && cart.customer_id !== customer.id) {
     await attachCustomerToCart();

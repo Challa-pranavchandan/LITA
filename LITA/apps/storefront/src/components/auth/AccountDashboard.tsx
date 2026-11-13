@@ -28,7 +28,7 @@ import {
 } from "@/lib/followed-artists";
 import CommissionPayButton from "@/components/commission/CommissionPayButton";
 import { AcceptCommissionQuoteButton } from "@/components/commission/AcceptCommissionQuoteButton";
-import { getCustomerOrderStatus } from "@/lib/order-status";
+import { OrdersList } from "@/components/orders/OrdersList";
 
 interface AccountDashboardProps {
   customer: HttpTypes.StoreCustomer;
@@ -425,56 +425,7 @@ export function AccountDashboard({
 
             <hr className="w-full border-t border-[#e5e5e5] mb-6" />
 
-            {orders.length > 0 && (
-              <div className="divide-y divide-[#eeeeee]">
-                {orders.map((o) => {
-                  const totalItems = (o.items ?? []).reduce((n, i) => n + i.quantity, 0);
-                  return (
-                    <div
-                      key={o.id}
-                      className="py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    >
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[15px] font-medium text-[#222222]">
-                            Order #{o.display_id}
-                          </span>
-                          {o.status && (
-                            <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 bg-[#f4f4f4] text-[#6b6b6b]">
-                              {getCustomerOrderStatus({
-                                orderStatus: o.status,
-                                paymentStatus: o.payment_status,
-                                fulfillmentStatus: o.fulfillment_status,
-                              })}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[13px] text-[#777777] mt-1">
-                          {new Date(o.created_at).toLocaleDateString("en-US", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })}{" "}
-                          · {totalItems} {totalItems === 1 ? "piece" : "pieces"}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-6">
-                        <span className="text-[15px] font-medium text-[#222222] tabular-nums">
-                          {formatMoney(o.total, o.currency_code)}
-                        </span>
-                        <Link
-                          href={`/order/${o.id}`}
-                          className="text-[13px] text-[#222222] underline underline-offset-4 hover:opacity-75 transition-opacity"
-                        >
-                          View Details
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <OrdersList orders={orders} />
           </section>
 
           {/* SECTION 4: Followed Artists */}

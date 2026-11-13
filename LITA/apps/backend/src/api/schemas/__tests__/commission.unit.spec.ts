@@ -1,4 +1,5 @@
 import {
+  CancelCommissionSchema,
   CommissionListQuerySchema,
   CommissionPaySchema,
   CommissionUploadUrlSchema,
@@ -79,6 +80,19 @@ describe("commission API schemas", () => {
     ).toBe(true)
     expect(
       CommissionListQuerySchema.safeParse({ limit: "1000" }).success
+    ).toBe(false)
+  })
+
+  it("validates cancel commission schema with optional reason", () => {
+    expect(CancelCommissionSchema.safeParse({}).success).toBe(true)
+    expect(
+      CancelCommissionSchema.safeParse({ reason: "Client changed mind" }).success
+    ).toBe(true)
+    expect(
+      CancelCommissionSchema.safeParse({ reason: "a".repeat(2001) }).success
+    ).toBe(false)
+    expect(
+      CancelCommissionSchema.safeParse({ extra_field: "disallowed" }).success
     ).toBe(false)
   })
 })

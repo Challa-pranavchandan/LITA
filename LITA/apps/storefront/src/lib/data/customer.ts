@@ -119,7 +119,8 @@ export async function listOrders(): Promise<HttpTypes.StoreOrder[]> {
       {
         limit: 50,
         order: "-created_at",
-        fields: "*items,payment_status,fulfillment_status",
+        fields:
+          "*items,*items.variant,*items.product,*shipping_address,*payment_collections,*fulfillments,display_id,created_at,email,status,payment_status,fulfillment_status,currency_code,total,subtotal,discount_total,shipping_total,tax_total,item_subtotal,summary",
       },
       headers
     );

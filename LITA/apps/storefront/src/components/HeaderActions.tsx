@@ -12,6 +12,7 @@ import {
 } from "@/components/livinIcons";
 import { useSaved } from "@/lib/saved";
 import { clearStaleCart } from "@/lib/data/cart";
+import { mergeCartedItems } from "@/lib/carted";
 import { HttpTypes } from "@medusajs/types";
 
 export function HeaderActions({
@@ -40,6 +41,15 @@ export function HeaderActions({
       clearStaleCart();
     }
   }, [hasStaleCart]);
+
+  useEffect(() => {
+    if (cart?.items?.length) {
+      const variantIds = cart.items
+        .map((item) => item.variant_id || item.variant?.id)
+        .filter((id): id is string => Boolean(id));
+      mergeCartedItems(variantIds);
+    }
+  }, [cart]);
 
   useEffect(() => {
     if (searchOpen) {

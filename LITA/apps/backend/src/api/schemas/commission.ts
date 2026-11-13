@@ -56,6 +56,10 @@ export const UpdateCommissionSchema = z.object({
   admin_notes: z.string().max(10000).nullable().optional(),
 }).strict()
 
+export const CancelCommissionSchema = z.object({
+  reason: z.string().trim().max(2000).optional(),
+}).strict()
+
 export const CommissionPaymentSessionSchema = z.object({
   provider_id: z
     .enum(["pp_razorpay_razorpay", "pp_upimanual_upimanual"])
