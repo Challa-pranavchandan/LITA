@@ -11,7 +11,7 @@
  * immediately.
  */
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useEffect } from "react";
 
 const KEY = "_lita_carted";
 
@@ -125,10 +125,16 @@ function subscribe(callback: () => void) {
 }
 
 export function useIsCarted(variantId: string, initialInCart = false): boolean {
+  useEffect(() => {
+    if (initialInCart && variantId && !isCarted(variantId)) {
+      markCarted(variantId);
+    }
+  }, [variantId, initialInCart]);
+
   const carted = useSyncExternalStore(
     subscribe,
     () => isCarted(variantId),
     () => initialInCart
   );
-  return Boolean(carted || initialInCart);
+  return carted;
 }

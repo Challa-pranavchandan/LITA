@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import type { HttpTypes } from "@medusajs/types";
 import { formatMoney } from "@/lib/format";
 import { applyPromoCode, removePromoCode, updateLineItem } from "@/lib/data/cart";
+import { unmarkCarted } from "@/lib/carted";
 
 export function CartLines({
   cart,
@@ -48,11 +49,32 @@ export function CartLines({
               {editable && (
                 <div className="mt-auto flex items-center gap-5 pt-4">
                   <div className="inline-flex items-center border border-dust">
-                    <button type="button" disabled={pending} onClick={() => run(() => updateLineItem(item.id, item.quantity - 1))} className="h-9 w-9 hover:bg-mist" aria-label={`Decrease quantity of ${item.product_title}`}>−</button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        const vId = item.variant_id || item.variant?.id;
+                        if (item.quantity - 1 <= 0 && vId) unmarkCarted(vId);
+                        run(() => updateLineItem(item.id, item.quantity - 1));
+                      }}
+                      className="h-9 w-9 hover:bg-mist"
+                      aria-label={`Decrease quantity of ${item.product_title}`}
+                    >
+                      −
+                    </button>
                     <span className="w-9 text-center tabular-nums" aria-live="polite">{item.quantity}</span>
                     <button type="button" disabled={pending} onClick={() => run(() => updateLineItem(item.id, item.quantity + 1))} className="h-9 w-9 hover:bg-mist" aria-label={`Increase quantity of ${item.product_title}`}>+</button>
                   </div>
-                  <button type="button" disabled={pending} onClick={() => run(() => updateLineItem(item.id, 0))} className="link text-sm text-graphite">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      const vId = item.variant_id || item.variant?.id;
+                      if (vId) unmarkCarted(vId);
+                      run(() => updateLineItem(item.id, 0));
+                    }}
+                    className="link text-sm text-graphite"
+                  >
                     Remove
                   </button>
                 </div>

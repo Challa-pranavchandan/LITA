@@ -110,13 +110,7 @@ export function ArtworkDetails({
     startTransition(async () => {
       const res = await addToCart(selectedVariantId, 1);
       if (!res.ok) {
-        // If it's a curated demo variant that isn't yet synced to remote DB, notify and open cart
-        if (res.error?.includes("variant") || res.error?.includes("not found")) {
-          setAdded(true);
-          window.dispatchEvent(new Event(CART_OPEN_EVENT));
-          return;
-        }
-        setError(res.error);
+        setError(res.error || "Failed to add artwork to cart.");
         return;
       }
       setAdded(true);

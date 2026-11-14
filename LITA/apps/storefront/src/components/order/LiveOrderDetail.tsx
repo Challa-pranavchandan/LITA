@@ -18,6 +18,7 @@ import { OrderStatusLine } from "./OrderStatusLine";
 import { OrderSummaryCard } from "./OrderSummaryCard";
 import { UpiPayPanel } from "@/components/upi/UpiPayPanel";
 import type { UpiPaymentInstructions } from "@/lib/data/upi";
+import { clearCarted } from "@/lib/carted";
 
 const REFRESH_INTERVAL = 15_000;
 
@@ -55,6 +56,10 @@ export function LiveOrderDetail({
   };
 
   const state = getOrderState(orderWithMeta);
+
+  useEffect(() => {
+    clearCarted();
+  }, []);
 
   // Non-terminal states: only poll if state is "pending_payment" or "shipped"
   const isNonTerminal = state.key === "pending_payment" || state.key === "shipped";

@@ -94,14 +94,14 @@ export async function getCommissionUploadUrl(
   filename: string,
   contentType: string,
   size: number
-): Promise<{ ok: boolean; url?: string; key?: string; error?: string }> {
+): Promise<{ ok: boolean; url?: string; key?: string; downloadUrl?: string; error?: string }> {
   try {
     const authHeaders = await getAuthHeaders();
     if (!authHeaders.authorization) {
       return { ok: false, error: "Please log in to upload reference images." };
     }
 
-    const res = await sdk.client.fetch<{ url: string; key: string }>(
+    const res = await sdk.client.fetch<{ url: string; key: string; downloadUrl?: string }>(
       "/store/commissions/upload-url",
       {
         method: "POST",
@@ -110,7 +110,7 @@ export async function getCommissionUploadUrl(
       }
     );
 
-    return { ok: true, url: res.url, key: res.key };
+    return { ok: true, url: res.url, key: res.key, downloadUrl: res.downloadUrl };
   } catch (err: unknown) {
     return {
       ok: false,

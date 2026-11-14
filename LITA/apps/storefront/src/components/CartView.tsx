@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { HttpTypes } from "@medusajs/types";
 import { clearStaleCart, deleteLineItem, updateLineItem } from "@/lib/data/cart";
+import { unmarkCarted, clearCarted } from "@/lib/carted";
 import { TrashIcon } from "@/components/livinIcons";
 
 function formatItemPrice(
@@ -132,12 +133,18 @@ export function CartView({ cart }: { cart: HttpTypes.StoreCart | null }) {
   const total = cart?.total ?? subtotal;
 
   useEffect(() => {
-    if (!cart) {
-      clearStaleCart();
+    if (!cart || items.length === 0) {
+      if (!cart) clearStaleCart();
+      clearCarted();
     }
-  }, [cart]);
+  }, [cart, items.length]);
 
   const handleRemove = (lineId: string) => {
+    const itemToRemove = items.find((i) => i.id === lineId);
+    const variantId = itemToRemove?.variant_id || itemToRemove?.variant?.id;
+    if (variantId) {
+      unmarkCarted(variantId);
+    }
     setError(null);
     setRemovingId(lineId);
     startTransition(async () => {

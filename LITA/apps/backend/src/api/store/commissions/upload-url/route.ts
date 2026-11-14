@@ -1,5 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { getPresignedPrivateUploadUrl } from "../../../../lib/r2"
+import { getPresignedPrivateUploadUrl, getPresignedPrivateDownloadUrl } from "../../../../lib/r2"
 import crypto from "crypto"
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
@@ -20,7 +20,13 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   try {
     const url = await getPresignedPrivateUploadUrl(key, contentType, size, 300)
-    return res.status(200).json({ url, key })
+    let downloadUrl: string | undefined
+    try {
+      downloadUrl = await getPresignedPrivateDownloadUrl(key, 86400 * 7)
+    } catch {
+      // fallback
+    }
+    return res.status(200).json({ url, key, downloadUrl })
   } catch (error: any) {
     console.error("[commissions] Failed to create private image upload URL:", error)
     return res.status(500).json({

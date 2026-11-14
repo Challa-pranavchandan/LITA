@@ -12,7 +12,7 @@ import {
 } from "@/components/livinIcons";
 import { useSaved } from "@/lib/saved";
 import { clearStaleCart } from "@/lib/data/cart";
-import { mergeCartedItems } from "@/lib/carted";
+import { syncCartedItems, clearCarted } from "@/lib/carted";
 import { HttpTypes } from "@medusajs/types";
 
 export function HeaderActions({
@@ -39,17 +39,19 @@ export function HeaderActions({
   useEffect(() => {
     if (hasStaleCart) {
       clearStaleCart();
+      clearCarted();
+      return;
     }
-  }, [hasStaleCart]);
 
-  useEffect(() => {
-    if (cart?.items?.length) {
-      const variantIds = cart.items
+    if (cart) {
+      const variantIds = (cart.items ?? [])
         .map((item) => item.variant_id || item.variant?.id)
         .filter((id): id is string => Boolean(id));
-      mergeCartedItems(variantIds);
+      syncCartedItems(variantIds);
+    } else {
+      clearCarted();
     }
-  }, [cart]);
+  }, [cart, hasStaleCart]);
 
   useEffect(() => {
     if (searchOpen) {

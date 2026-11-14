@@ -147,13 +147,7 @@ export function BuyBox({
     startTransition(async () => {
       const res = await addToCart(selectedVariantId, 1);
       if (!res.ok) {
-        // Fallback for curated mock products not yet populated in remote Medusa
-        if (res.error?.includes("variant") || res.error?.includes("not found")) {
-          markCarted(selectedVariantId);
-          window.dispatchEvent(new Event(CART_OPEN_EVENT));
-          return;
-        }
-        setError(res.error);
+        setError(res.error || "Failed to add artwork to cart.");
         return;
       }
       markCarted(selectedVariantId);

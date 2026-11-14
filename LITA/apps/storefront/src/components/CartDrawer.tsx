@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { HttpTypes } from "@medusajs/types";
 import { formatMoney } from "@/lib/format";
 import { updateLineItem } from "@/lib/data/cart";
+import { unmarkCarted } from "@/lib/carted";
 
 import { CartIcon } from "@/components/livinIcons";
 
@@ -53,7 +54,10 @@ export function CartDrawer({
     };
   }, [open, close]);
 
-  function change(lineId: string, qty: number) {
+  function change(lineId: string, qty: number, variantId?: string | null) {
+    if (qty <= 0 && variantId) {
+      unmarkCarted(variantId);
+    }
     setError(null);
     startTransition(async () => {
       const res = await updateLineItem(lineId, qty);
@@ -129,19 +133,36 @@ export function CartDrawer({
                         )}
                         <div className="mt-auto flex items-center justify-between pt-3">
                           <div className="inline-flex items-center border border-dust">
-                            <button type="button" disabled={pending} onClick={() => change(item.id, item.quantity - 1)} className="h-8 w-8 hover:bg-mist" aria-label="Decrease quantity">
+                            <button
+                              type="button"
+                              disabled={pending}
+                              onClick={() => change(item.id, item.quantity - 1, item.variant_id || item.variant?.id)}
+                              className="h-8 w-8 hover:bg-mist"
+                              aria-label="Decrease quantity"
+                            >
                               −
                             </button>
                             <span className="w-8 text-center text-[15px] tabular-nums" aria-live="polite">
                               {item.quantity}
                             </span>
-                            <button type="button" disabled={pending} onClick={() => change(item.id, item.quantity + 1)} className="h-8 w-8 hover:bg-mist" aria-label="Increase quantity">
+                            <button
+                              type="button"
+                              disabled={pending}
+                              onClick={() => change(item.id, item.quantity + 1, item.variant_id || item.variant?.id)}
+                              className="h-8 w-8 hover:bg-mist"
+                              aria-label="Increase quantity"
+                            >
                               +
                             </button>
                           </div>
                           <p className="tabular-nums">{formatMoney(item.total, currency)}</p>
                         </div>
-                        <button type="button" disabled={pending} onClick={() => change(item.id, 0)} className="link mt-2 self-start text-sm text-graphite">
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => change(item.id, 0, item.variant_id || item.variant?.id)}
+                          className="link mt-2 self-start text-sm text-graphite"
+                        >
                           Remove
                         </button>
                       </div>
